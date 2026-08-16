@@ -4,6 +4,7 @@
 #include <ESPAsyncWebServer.h>
 #include <IRremote.hpp>
 #include <map>
+#include <espnow.h> // <-- NEU: ESP-NOW Bibliothek
 
 // WLAN Cridantils
 const char* ssid = "VOR-Verstärker";
@@ -47,6 +48,32 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
 int currentSliderValue = 50; // Startwert in der Mitte
+
+// --- NEU: ESP-NOW DATENSTRUKTUR ---
+typedef struct struct_message {
+    char command[32]; // Platz für Befehle wie "volume_up"
+} struct_message;
+
+struct_message incomingData;
+
+// --- NEU: ESP-NOW EMPFANGS-LOGIK ---
+void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
+  struct_message payload;
+  memcpy(&payload, incomingData, sizeof(payload));
+  
+  String msg = String(payload.command);
+  
+  Serial.print("ESP-NOW empfangen: ");
+  Serial.println(msg);
+
+  // Vergleicht den String mit dem Wörterbuch und sendet das Infrarot-Signal
+  if (ir_codes.count(msg) > 0) {
+    IrSender.sendNEC(122, ir_codes[msg], 0);
+    Serial.println("-> IR gesendet (via ESP-NOW)");
+  } else {
+    Serial.println("-> Unbekannter Befehl!");
+  }
+}
 
 // --- HTML FRONTEND (Wird direkt im Chip gespeichert) ---
 const char index_html[] PROGMEM = R"rawliteral(
@@ -399,7 +426,7 @@ const char index_html[] PROGMEM = R"rawliteral(
 )rawliteral";
 
 
-// --- WEBSOCKET LOGIK (Hier passiert die Magie) ---
+// --- WEBSOCKET LOGIK ---
 void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
   if (type == WS_EVT_DATA) {
     // Die empfangenen Daten in einen lesbaren String verwandeln
@@ -437,6 +464,24 @@ void setup() {
   Serial.println("\nErfolgreich verbunden!");
   Serial.print("-> Öffne im Browser: http://");
   Serial.println(WiFi.localIP());
+
+  // --- WICHTIG FÜR ESP-NOW ---
+  Serial.print("\n--- ESP-NOW SETUP ---");
+  Serial.print("\n-> MAC-Adresse: ");
+  Serial.println(WiFi.macAddress());
+  Serial.print("-> Aktueller WLAN-Kanal: ");
+  Serial.println(WiFi.channel());
+
+  // --- ESP-NOW INITIALISIEREN ---
+  if (esp_now_init() != 0) {
+    Serial.println("Fehler beim Starten von ESP-NOW!");
+  } else {
+    // Basisstation als Empfänger festlegen
+    esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
+    // Callback-Funktion verknüpfen
+    esp_now_register_recv_cb(OnDataRecv);
+    Serial.println("-> ESP-NOW Empfänger ist bereit!\n");
+  }
 
   // Die HTML Seite auf der Hauptroute (/) ausliefern
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
