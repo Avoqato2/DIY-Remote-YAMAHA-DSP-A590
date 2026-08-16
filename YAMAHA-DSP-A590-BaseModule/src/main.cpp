@@ -3,13 +3,40 @@
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <IRremote.hpp>
+#include <map>
 
+// WLAN Cridantils
 const char* ssid = "VOR-Verstärker";
 const char* password = "***REMOVED***";
-const int IR_SEND_PIN = D4; 
-const int volUpCode = 26;
-const int volDownCode = 27; // Nimm hier den echten Code für "Leiser"
-const int standbyCode = 28; // Nimm hier den echten Code für "Standby"
+// Infrared pin for the ESP8266 D1 Mini (GPIO2)
+const int IR_SEND_PIN = D2; 
+// Infrared codes for AMP
+std::map<String, int> ir_codes = {
+  {"standby", 31},
+  {"sleep", 87},
+  {"volume_up", 26},
+  {"volume_down", 27},
+  {"ld/tv", 23},
+  {"cd", 21},
+  {"phono", 20},
+  {"video_aux", 85},
+  {"tuner", 22},
+  {"vcr1", 15},
+  {"vcr2", 19},
+  {"effect_on_off", 86},
+  {"test", 133},
+  {"delay_center_rear_swf", 134},
+  {"delay_center_rear_swf_up", 82},
+  {"delay_center_rear_swf_down", 83},
+  {"prologic", 136},
+  {"enhanced", 137},
+  {"concert_hall", 141},
+  {"concert_video", 138},
+  {"rock_concert", 140},
+  {"disco", 143},
+  {"mono_movie", 139},
+  {"stadium", 142}
+};
 
 // --- SERVER & STATUS ---
 AsyncWebServer server(80);
@@ -342,32 +369,8 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
     Serial.print("WebSocket empfangen: ");
     Serial.println(msg);
 
-    // 1. Wenn die Nachricht vom Slider kommt (z.B. "SLIDER:65")
-    if (msg.startsWith("SLIDER:")) {
-      int newVal = msg.substring(7).toInt(); // Schneidet "SLIDER:" ab und macht eine Zahl daraus
-      int diff = newVal - currentSliderValue;
-      
-      if (diff > 0) {
-        // Muss lauter werden
-        for(int i = 0; i < diff; i++) {
-          IrSender.sendNEC(122, volUpCode, 0);
-          delay(40); // WICHTIG: Kurze Pause, sonst verschluckt sich der Verstärker!
-        }
-      } 
-      else if (diff < 0) {
-        // Muss leiser werden
-        for(int i = 0; i < abs(diff); i++) {
-          IrSender.sendNEC(122, volDownCode, 0);
-          delay(40); 
-        }
-      }
-      
-      currentSliderValue = newVal; // Neuen Stand merken
-    }
-    
-    // 2. Wenn der Standby-Knopf gedrückt wurde
-    else if (msg == "STANDBY") {
-      IrSender.sendNEC(122, standbyCode, 0);
+    if (ir_codes.count(msg) > 0) {
+      IrSender.sendNEC(122, ir_codes[msg], 0);
     }
   }
 }
