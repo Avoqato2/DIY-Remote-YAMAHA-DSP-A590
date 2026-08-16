@@ -26,8 +26,12 @@ std::map<String, int> ir_codes = {
   {"effect_on_off", 86},
   {"test", 133},
   {"delay_center_rear_swf", 134},
-  {"delay_center_rear_swf_up", 82},
-  {"delay_center_rear_swf_down", 83},
+  {"delay_up", 82},
+  {"delay_down", 83},
+  {"center_up", 82},
+  {"center_down", 83},
+  {"rear_up", 94},
+  {"rear_down", 95},
   {"prologic", 136},
   {"enhanced", 137},
   {"concert_hall", 141},
@@ -76,6 +80,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         width: 100%;
         overflow: hidden;
         background-color: #121212;
+        touch-action: manipulation;
       }
 
       * {
@@ -312,10 +317,13 @@ const char index_html[] PROGMEM = R"rawliteral(
       </div>
       <div id="delay_center_rear_swf_control_sec">
         <button id="test">Test</button>
-        <button id="delay_center_rear_swf">Delay/Center/Rear/SWF</button>
         <div id="delay_center_rear_swf_level">
-          <button id="delay_center_rear_swf_up">Level +</button>
-          <button id="delay_center_rear_swf_down">Level -</button>
+          <button id="delay_up">Delay +</button>
+          <button id="delay_down">Delay -</button>
+          <button id="center_up">Center +</button>
+          <button id="center_down">Center -</button>
+          <button id="rear_up">Rear +</button>
+          <button id="rear_down">Rear -</button>
         </div>
       </div>
       <div id="effect_controlType">
@@ -334,24 +342,56 @@ const char index_html[] PROGMEM = R"rawliteral(
     <script>
       var gateway = `ws://${window.location.hostname}/ws`;
       var websocket;
+      var holdInterval; // Hier speichern wir unsere Stoppuhr
 
-      // Sobald die Seite lädt, WebSocket starten
       window.addEventListener("load", function () {
         websocket = new WebSocket(gateway);
 
-        // Listener
-        document.addEventListener("click", function (event) {
-          if (event.target.tagName === "BUTTON") {
-            const button_id = event.target.id;
-            sendAction(button_id);
-            console.log(`Button clicked: ${button_id}`);
-          }
+        // Arrays mit allen "Drücken" und "Loslassen" Events
+        const startEvents = ["mousedown", "touchstart"];
+        const stopEvents = ["mouseup", "mouseleave", "touchend", "touchcancel"];
+
+        // 1. Das Drücken abfangen (Start)
+        startEvents.forEach(function (eventType) {
+          document.addEventListener(
+            eventType,
+            function (event) {
+              if (event.target.tagName === "BUTTON") {
+                // Verhindert am Handy, dass das Event doppelt feuert (Touch + simulierter Mausklick)
+                if (eventType === "touchstart") event.preventDefault();
+
+                const button_id = event.target.id;
+
+                // Einmal sofort feuern (für kurze Klicks)
+                sendAction(button_id);
+                console.log(`Button pressed: ${button_id}`);
+
+                // Stoppuhr starten: Feuert alle 150ms erneut
+                holdInterval = setInterval(function () {
+                  sendAction(button_id);
+                }, 150);
+              }
+            },
+            { passive: false },
+          );
+        });
+
+        // 2. Das Loslassen abfangen (Stop)
+        stopEvents.forEach(function (eventType) {
+          document.addEventListener(eventType, function (event) {
+            if (event.target.tagName === "BUTTON") {
+              // Stoppt das Dauerfeuer sofort
+              clearInterval(holdInterval);
+            }
+          });
         });
       });
 
-      // Funktion für normale Knöpfe
+      // Funktion zum Senden an den ESP8266
       function sendAction(action) {
-        websocket.send(action);
+        if (websocket.readyState === WebSocket.OPEN) {
+          websocket.send(action);
+        }
       }
     </script>
   </body>
