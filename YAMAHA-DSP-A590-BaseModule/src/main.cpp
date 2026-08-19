@@ -4,78 +4,76 @@
 #include <ESPAsyncWebServer.h>
 #include <IRremote.hpp>
 #include <map>
-#include <espnow.h> // <-- NEU: ESP-NOW Bibliothek
+#include <espnow.h> 
 
-// WLAN Cridantils
+// WLAN Credentials
 const char* ssid = "VOR-Verstärker";
 const char* password = "***REMOVED***";
+
 // Infrared pin for the ESP8266 D1 Mini (GPIO2)
 const int IR_SEND_PIN = D2; 
+
+// --- NEU: LOG-SYSTEM ---
+String logBuffer = ""; // Hier speichern wir die Log-Einträge
+
+void addLog(String message) {
+  // Berechne Laufzeit in Stunden, Minuten, Sekunden
+  unsigned long secs = millis() / 1000;
+  String timeStr = "[" + String(secs / 3600) + ":" + String((secs / 60) % 60) + ":" + String(secs % 60) + "] ";
+  
+  String newEntry = timeStr + message;
+  Serial.println(newEntry); // Weiterhin über USB ausgeben
+  
+  // Im RAM speichern (mit HTML-Zeilenumbruch)
+  logBuffer += newEntry + "<br>";
+
+  // Verhindern, dass der Arbeitsspeicher überläuft (maximal ~2000 Zeichen behalten)
+  if (logBuffer.length() > 2000) {
+    int cutPos = logBuffer.indexOf("<br>") + 4;
+    logBuffer = logBuffer.substring(cutPos);
+  }
+}
+
 // Infrared codes for AMP
 std::map<String, int> ir_codes = {
-  {"standby", 31},
-  {"sleep", 87},
-  {"volume_up", 26},
-  {"volume_down", 27},
-  {"ld/tv", 23},
-  {"cd", 21},
-  {"phono", 20},
-  {"video_aux", 85},
-  {"tuner", 22},
-  {"vcr1", 15},
-  {"vcr2", 19},
-  {"effect_on_off", 86},
-  {"test", 133},
-  {"delay_center_rear_swf", 134},
-  {"delay_up", 82},
-  {"delay_down", 83},
-  {"center_up", 130},
-  {"center_down", 131},
-  {"rear_up", 94},
-  {"rear_down", 95},
-  {"prologic", 136},
-  {"enhanced", 137},
-  {"concert_hall", 141},
-  {"concert_video", 138},
-  {"rock_concert", 140},
-  {"disco", 143},
-  {"mono_movie", 139},
-  {"stadium", 142}
+  {"standby", 31}, {"sleep", 87}, {"volume_up", 26}, {"volume_down", 27},
+  {"ld/tv", 23}, {"cd", 21}, {"phono", 20}, {"video_aux", 85},
+  {"tuner", 22}, {"vcr1", 15}, {"vcr2", 19}, {"effect_on_off", 86},
+  {"test", 133}, {"delay_center_rear_swf", 134}, {"delay_up", 82}, {"delay_down", 83},
+  {"center_up", 130}, {"center_down", 131}, {"rear_up", 94}, {"rear_down", 95},
+  {"prologic", 136}, {"enhanced", 137}, {"concert_hall", 141}, {"concert_video", 138},
+  {"rock_concert", 140}, {"disco", 143}, {"mono_movie", 139}, {"stadium", 142}
 };
 
 // --- SERVER & STATUS ---
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
-int currentSliderValue = 50; // Startwert in der Mitte
+unsigned long letzterWlanCheck = 0; 
 
-// --- NEU: ESP-NOW DATENSTRUKTUR ---
+// --- ESP-NOW DATENSTRUKTUR ---
 typedef struct struct_message {
-    char command[32]; // Platz für Befehle wie "volume_up"
+    char command[32]; 
 } struct_message;
 
 struct_message incomingData;
 
-// --- NEU: ESP-NOW EMPFANGS-LOGIK ---
+// --- ESP-NOW EMPFANGS-LOGIK ---
 void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
   struct_message payload;
   memcpy(&payload, incomingData, sizeof(payload));
   
   String msg = String(payload.command);
   
-  Serial.print("ESP-NOW empfangen: ");
-  Serial.println(msg);
-
-  // Vergleicht den String mit dem Wörterbuch und sendet das Infrarot-Signal
   if (ir_codes.count(msg) > 0) {
     IrSender.sendNEC(122, ir_codes[msg], 0);
-    Serial.println("-> IR gesendet (via ESP-NOW)");
+    addLog("ESP-NOW Empfang: " + msg + " -> IR gesendet"); 
   } else {
-    Serial.println("-> Unbekannter Befehl!");
+    addLog("ESP-NOW Fehler: Unbekannter Befehl '" + msg + "'");
   }
 }
 
-// --- HTML FRONTEND (Wird direkt im Chip gespeichert) ---
+// --- HTML FRONTEND (Wieder gut lesbar formatiert) ---
 const char index_html[] PROGMEM = R"rawliteral(
 <!doctype html>
 <html lang="en">
@@ -83,8 +81,6 @@ const char index_html[] PROGMEM = R"rawliteral(
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AMP-Remote</title>
-  </head>
-  <body>
     <style>
       :root {
         --remote-bg: #222224;
@@ -98,9 +94,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         --shadow: rgba(0, 0, 0, 0.5);
       }
 
-      /* Verhindert jegliches Scrollen und setzt die Höhe auf 100% des Viewports */
-      html,
-      body {
+      html, body {
         margin: 0;
         padding: 0;
         height: 100%;
@@ -114,29 +108,24 @@ const char index_html[] PROGMEM = R"rawliteral(
         box-sizing: border-box;
       }
 
-      /* Der Body als Fernbedienungs-Gehäuse, passt sich dynamisch der Bildschirmhöhe an (dvh) */
       body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-          Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         background-color: var(--remote-bg);
         color: var(--btn-text);
         max-width: 400px;
-        height: 96dvh; /* Nutzt 96% der sichtbaren Bildschirmhöhe */
+        height: 96dvh;
         margin: 2dvh auto;
         padding: 2dvh 15px;
         border-radius: 40px;
         border: 2px solid var(--remote-border);
-        box-shadow:
-          0 20px 50px var(--shadow),
-          inset 0 4px 10px rgba(255, 255, 255, 0.05),
-          inset 0 -4px 10px rgba(0, 0, 0, 0.6);
+        box-shadow: 0 20px 50px var(--shadow), 
+                    inset 0 4px 10px rgba(255, 255, 255, 0.05), 
+                    inset 0 -4px 10px rgba(0, 0, 0, 0.6);
         display: flex;
         flex-direction: column;
-        justify-content: space-between; /* Verteilt alle Sektionen gleichmäßig über die Höhe */
+        justify-content: space-between;
       }
 
-      /* Typografie skaliert dynamisch mit der Bildschirmhöhe */
       h1 {
         font-size: min(1.4rem, 3.5dvh);
         margin: 0;
@@ -160,17 +149,15 @@ const char index_html[] PROGMEM = R"rawliteral(
         flex-shrink: 0;
       }
 
-      /* Alle Container verteilen ihren Platz dynamisch */
       div {
         display: flex;
         flex-wrap: wrap;
         width: 100%;
         justify-content: center;
         padding: 0.5dvh 0;
-        gap: 1dvh; /* Abstände skalieren mit der Höhe */
+        gap: 1dvh;
       }
 
-      /* Tasten passen ihre Höhe automatisch an den verfügbaren Platz an */
       button {
         background-color: var(--btn-base);
         color: var(--btn-text);
@@ -181,30 +168,23 @@ const char index_html[] PROGMEM = R"rawliteral(
         cursor: pointer;
         user-select: none;
         -webkit-tap-highlight-color: transparent;
-        box-shadow:
-          0 4px 6px rgba(0, 0, 0, 0.4),
-          inset 0 2px 2px var(--highlight);
-        transition:
-          transform 0.05s,
-          box-shadow 0.05s,
-          background-color 0.1s;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4), 
+                    inset 0 2px 2px var(--highlight);
+        transition: transform 0.05s, box-shadow 0.05s, background-color 0.1s;
         display: flex;
         justify-content: center;
         align-items: center;
         text-align: center;
-        padding: 0; /* Padding entfernt, damit Flexbox die Höhe komplett steuert */
-        min-height: 4.5dvh; /* Mindesthöhe für Tappbarkeit am Handy */
+        padding: 0;
+        min-height: 4.5dvh;
       }
 
       button:active {
         transform: translateY(2px);
         background-color: var(--btn-active);
-        box-shadow:
-          0 1px 2px rgba(0, 0, 0, 0.6),
-          inset 0 2px 4px rgba(0, 0, 0, 0.4);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 
+                    inset 0 2px 4px rgba(0, 0, 0, 0.4);
       }
-
-      /* --- SPEZIFISCHE SEKTIONEN --- */
 
       #main_button_sec {
         justify-content: space-between;
@@ -225,7 +205,6 @@ const char index_html[] PROGMEM = R"rawliteral(
         background-color: var(--accent-red-active);
       }
 
-      /* Lautstärke jetzt nebeneinander, um stark vertikalen Platz zu sparen */
       #volume_control_sec {
         flex-direction: row;
         gap: 1dvh;
@@ -236,10 +215,9 @@ const char index_html[] PROGMEM = R"rawliteral(
         font-size: min(1.1rem, 2.5dvh);
         border-radius: 16px;
         background-color: #33363a;
-        min-height: 5dvh; /* Wichtige Tasten etwas höher */
+        min-height: 5dvh;
       }
 
-      /* Kanäle (3er-Grid) */
       #channel_control_sec {
         justify-content: space-between;
       }
@@ -250,10 +228,9 @@ const char index_html[] PROGMEM = R"rawliteral(
         font-size: min(0.8rem, 1.8dvh);
       }
 
-      /* Effekte (Verschachtelte Layouts) */
       #effect_control_sec {
         flex-direction: column;
-        flex: 1; /* Nimmt den restlichen Platz ein */
+        flex: 1;
         justify-content: space-between;
       }
 
@@ -263,7 +240,6 @@ const char index_html[] PROGMEM = R"rawliteral(
         min-height: 5dvh;
       }
 
-      /* Der Menü-Block für die Pegel-Einstellung */
       #delay_center_rear_swf_control_sec {
         background-color: #1a1a1c;
         padding: 1dvh;
@@ -284,7 +260,6 @@ const char index_html[] PROGMEM = R"rawliteral(
         flex: 1 1 calc(50% - 0.5dvh);
       }
 
-      /* Effekt-Typen (2er-Grid) */
       #effect_controlType {
         justify-content: space-between;
       }
@@ -294,17 +269,14 @@ const char index_html[] PROGMEM = R"rawliteral(
         justify-content: space-between;
       }
 
-      #effect_controlType button,
-      #prologic_enhanced button {
+      #effect_controlType button, #prologic_enhanced button {
         flex: 1 1 calc(50% - 0.5dvh);
         font-size: min(0.8rem, 1.8dvh);
         border-radius: 8px;
       }
 
-      /* --- MOBILE ANPASSUNG --- */
       @media (max-width: 420px) {
-        html,
-        body {
+        html, body {
           background-color: var(--remote-bg);
         }
         body {
@@ -314,19 +286,24 @@ const char index_html[] PROGMEM = R"rawliteral(
           border-radius: 0;
           border: none;
           box-shadow: none;
-          padding: 3dvh 15px; /* Etwas mehr Randabstand am Handy oben/unten */
+          padding: 3dvh 15px;
         }
       }
     </style>
+  </head>
+  <body>
     <h1>AMP Remote</h1>
+    
     <div id="main_button_sec">
       <button id="standby">Standby</button>
       <button id="sleep">Sleep</button>
     </div>
+    
     <div id="volume_control_sec">
       <button id="volume_up">Volume +</button>
       <button id="volume_down">Volume -</button>
     </div>
+    
     <h2>Channels</h2>
     <div id="channel_control_sec">
       <button id="ld/tv">LD/TV</button>
@@ -337,11 +314,13 @@ const char index_html[] PROGMEM = R"rawliteral(
       <button id="vcr1">VCR 1</button>
       <button id="vcr2">VCR 2</button>
     </div>
+    
     <h2>Effects</h2>
     <div id="effect_control_sec">
       <div id="effect_control_on_off">
         <button id="effect_on_off">Effect On/Off</button>
       </div>
+      
       <div id="delay_center_rear_swf_control_sec">
         <button id="test">Test</button>
         <div id="delay_center_rear_swf_level">
@@ -353,6 +332,7 @@ const char index_html[] PROGMEM = R"rawliteral(
           <button id="rear_down">Rear -</button>
         </div>
       </div>
+      
       <div id="effect_controlType">
         <div id="prologic_enhanced">
           <button id="prologic">Prologic</button>
@@ -366,58 +346,45 @@ const char index_html[] PROGMEM = R"rawliteral(
         <button id="stadium">Stadium</button>
       </div>
     </div>
+    
     <script>
       var gateway = `ws://${window.location.hostname}/ws`;
-      var websocket;
-      var holdInterval; // Hier speichern wir unsere Stoppuhr
-
+      var websocket; 
+      var holdInterval; 
+      
       window.addEventListener("load", function () {
         websocket = new WebSocket(gateway);
-
-        // Arrays mit allen "Drücken" und "Loslassen" Events
+        
         const startEvents = ["mousedown", "touchstart"];
         const stopEvents = ["mouseup", "mouseleave", "touchend", "touchcancel"];
-
-        // 1. Das Drücken abfangen (Start)
+        
         startEvents.forEach(function (eventType) {
-          document.addEventListener(
-            eventType,
-            function (event) {
-              if (event.target.tagName === "BUTTON") {
-                // Verhindert am Handy, dass das Event doppelt feuert (Touch + simulierter Mausklick)
-                if (eventType === "touchstart") event.preventDefault();
-
-                const button_id = event.target.id;
-
-                // Einmal sofort feuern (für kurze Klicks)
-                sendAction(button_id);
-                console.log(`Button pressed: ${button_id}`);
-
-                // Stoppuhr starten: Feuert alle 150ms erneut
-                holdInterval = setInterval(function () {
-                  sendAction(button_id);
-                }, 150);
-              }
-            },
-            { passive: false },
-          );
+          document.addEventListener(eventType, function (event) {
+            if (event.target.tagName === "BUTTON") {
+              if (eventType === "touchstart") event.preventDefault();
+              
+              const button_id = event.target.id;
+              sendAction(button_id);
+              
+              holdInterval = setInterval(function () { 
+                sendAction(button_id); 
+              }, 150);
+            }
+          }, { passive: false });
         });
-
-        // 2. Das Loslassen abfangen (Stop)
+        
         stopEvents.forEach(function (eventType) {
           document.addEventListener(eventType, function (event) {
             if (event.target.tagName === "BUTTON") {
-              // Stoppt das Dauerfeuer sofort
               clearInterval(holdInterval);
             }
           });
         });
       });
-
-      // Funktion zum Senden an den ESP8266
-      function sendAction(action) {
+      
+      function sendAction(action) { 
         if (websocket.readyState === WebSocket.OPEN) {
-          websocket.send(action);
+          websocket.send(action); 
         }
       }
     </script>
@@ -425,19 +392,19 @@ const char index_html[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-
 // --- WEBSOCKET LOGIK ---
 void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-  if (type == WS_EVT_DATA) {
-    // Die empfangenen Daten in einen lesbaren String verwandeln
+  if (type == WS_EVT_CONNECT) {
+    addLog("Web-Client verbunden: IP " + client->remoteIP().toString());
+  } else if (type == WS_EVT_DISCONNECT) {
+    addLog("Web-Client getrennt");
+  } else if (type == WS_EVT_DATA) {
     data[len] = 0;
     String msg = (char*)data;
     
-    Serial.print("WebSocket empfangen: ");
-    Serial.println(msg);
-
     if (ir_codes.count(msg) > 0) {
       IrSender.sendNEC(122, ir_codes[msg], 0);
+      addLog("Web-Befehl: " + msg); // Optional: Kann man auch auskommentieren, wenn es zu viel Spam wird
     }
   }
 }
@@ -449,52 +416,83 @@ void setup() {
   
   IrSender.begin(IR_SEND_PIN);
   
-  Serial.print("\nVerbinde mit WLAN: ");
-  Serial.println(ssid);
+  addLog("System gestartet.");
+  addLog("Verbinde mit WLAN: " + String(ssid));
   
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true); 
+  WiFi.persistent(false);      
+  WiFi.setSleepMode(WIFI_NONE_SLEEP); // <-- DIE LÖSUNG GEGEN DEN MODEM-SLEEP!
   WiFi.begin(ssid, password);
 
-  // Warteschleife
-  while (WiFi.status() != WL_CONNECTED) {
+  int versuche = 0;
+  while (WiFi.status() != WL_CONNECTED && versuche < 40) {
     delay(500);
     Serial.print(".");
+    versuche++;
   }
 
-  Serial.println("\nErfolgreich verbunden!");
-  Serial.print("-> Öffne im Browser: http://");
-  Serial.println(WiFi.localIP());
+  if (WiFi.status() != WL_CONNECTED) {
+    addLog("WLAN-Timeout! Modul startet neu...");
+    delay(1000);
+    ESP.restart(); 
+  }
 
-  // --- WICHTIG FÜR ESP-NOW ---
-  Serial.print("\n--- ESP-NOW SETUP ---");
-  Serial.print("\n-> MAC-Adresse: ");
-  Serial.println(WiFi.macAddress());
-  Serial.print("-> Aktueller WLAN-Kanal: ");
-  Serial.println(WiFi.channel());
+  addLog("Erfolgreich verbunden! IP: " + WiFi.localIP().toString());
 
-  // --- ESP-NOW INITIALISIEREN ---
+  // --- ESP-NOW SETUP ---
   if (esp_now_init() != 0) {
-    Serial.println("Fehler beim Starten von ESP-NOW!");
+    addLog("Fehler bei ESP-NOW Init!");
   } else {
-    // Basisstation als Empfänger festlegen
     esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
-    // Callback-Funktion verknüpfen
     esp_now_register_recv_cb(OnDataRecv);
-    Serial.println("-> ESP-NOW Empfänger ist bereit!\n");
+    addLog("ESP-NOW bereit. MAC: " + WiFi.macAddress());
   }
 
-  // Die HTML Seite auf der Hauptroute (/) ausliefern
+  // Route 1: Die normale Fernbedienung
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/html", index_html);
   });
 
-  // Den WebSocket-Tunnel anbinden
+  // Route 2: NEU - Das System-Logbuch!
+  server.on("/log", HTTP_GET, [](AsyncWebServerRequest *request){
+    // Erstellt eine dunkle Seite, die das Log zeigt und sich alle 10 Sekunden selbst aktualisiert
+    String html = "<html><head><meta charset='UTF-8'><meta http-equiv='refresh' content='10'></head>";
+    html += "<body style='font-family:monospace; background-color:#121212; color:#0f0;'>";
+    html += "<h2>System Logbuch</h2>";
+    html += logBuffer;
+    html += "</body></html>";
+    request->send(200, "text/html", html);
+  });
+
   ws.onEvent(onEvent);
   server.addHandler(&ws);
 
   server.begin();
+  addLog("Webserver gestartet.");
 }
 
+unsigned long letzterLoopCheck = 0;
+
+// --- HAUPTSCHLEIFE ---
 void loop() {
-  // Der Loop bleibt leer! AsyncWebServer macht alles im Hintergrund.
+  unsigned long jetzt = millis();
+
+  // Alle 2 Sekunden ausführen (Gibt dem Chip Zeit zum Atmen!)
+  if (jetzt - letzterLoopCheck >= 2000) {
+    
+    ws.cleanupClients(); // Tote Verbindungen kappen
+    
+    // WLAN-Wächter
+    if (WiFi.status() != WL_CONNECTED) {
+      if (jetzt - letzterWlanCheck >= 30000) {
+        addLog("WLAN Verbindung verloren! Starte Reconnect...");
+        WiFi.disconnect();
+        WiFi.begin(ssid, password);
+        letzterWlanCheck = jetzt;
+      }
+    }
+    
+    letzterLoopCheck = jetzt;
+  }
 }
