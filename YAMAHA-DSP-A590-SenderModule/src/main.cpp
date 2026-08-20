@@ -3,7 +3,10 @@
 #include <Adafruit_GFX.h>           // Fonts and drawing lib
 #include <Adafruit_ST7789.h>        // Hardware-specific library for ST7789
 #include <map>                      // For mapping IR codes to strings
-#include <Ticker.h>
+#include <Ticker.h>                 // For encoder Guard
+#include <WiFi.h>
+#include <esp_now.h>                // ESP to ESP Kommunikation
+
 Ticker encoderTicker; // Unser Timer für den Encoder
 
 // --------------------------------------------------------------------------------
@@ -29,19 +32,6 @@ Ticker encoderTicker; // Unser Timer für den Encoder
 // ------------------------------Define Pins---------------------------------------
 // --------------------------------------------------------------------------------
 
-Adafruit_ST7789 tft = Adafruit_ST7789(display_CS, display_DC, -1); // Create an instance of the display driver
-
-// Temp helper for the ir codes
-std::map<String, int> ir_codes = {
-  {"standby", 31}, {"sleep", 87}, {"volume_up", 26}, {"volume_down", 27},
-  {"ld/tv", 23}, {"cd", 21}, {"phono", 20}, {"video_aux", 85},
-  {"tuner", 22}, {"vcr1", 15}, {"vcr2", 19}, {"effect_on_off", 86},
-  {"test", 133}, {"delay_center_rear_swf", 134}, {"delay_up", 82}, {"delay_down", 83},
-  {"center_up", 130}, {"center_down", 131}, {"rear_up", 94}, {"rear_down", 95},
-  {"prologic", 136}, {"enhanced", 137}, {"concert_hall", 141}, {"concert_video", 138},
-  {"rock_concert", 140}, {"disco", 143}, {"mono_movie", 139}, {"stadium", 142}
-};
-
 //unsigned long letzteAktivitaet = 0; // for later use, probaly for sleepmode
 
 //----------------------------------------------------------------
@@ -55,6 +45,35 @@ bool aranage_settings_with_encoder = false;
 //----------------------------------------------------------------
 //-----------------------State bools------------------------------
 //----------------------------------------------------------------
+
+
+// --------------------------------------------------------------------------------
+// ------------------------------ESP NOW Section-----------------------------------
+// --------------------------------------------------------------------------------
+uint8_t basemodule_mac[] = {0xC8, 0xC9, 0xA3, 0x25, 0x3F, 0x02};
+
+typedef struct struct_message {
+  char command[32]; 
+} struct_message;
+
+struct_message myData;
+esp_now_peer_info_t peerInfo;
+
+void send_command(String cmd) {
+  strncpy(myData.command, cmd.c_str(), sizeof(myData.command));
+  esp_err_t result = esp_now_send(basemodule_mac, (uint8_t *) &myData, sizeof(myData));
+  
+  if (result == ESP_OK) {
+    Serial.println("Gesendet: " + cmd);
+  } else {
+    Serial.println("Fehler beim Senden!");
+  }
+}
+
+// --------------------------------------------------------------------------------
+// ------------------------------ESP NOW Section-----------------------------------
+// --------------------------------------------------------------------------------
+
 
 //----------------------------------------------------------------
 //------------------Rotary Encoder Section------------------------
@@ -92,6 +111,7 @@ void leseEncoder() {
 //-----------------------Menu Section-----------------------------
 //----------------------------------------------------------------
 
+Adafruit_ST7789 tft = Adafruit_ST7789(display_CS, display_DC, -1); // Create an instance of the display driver
 
 //-----------------------Menu variables----------------------------
 int current_selected_item = 0;  // Index of the currently selected item in the menu
@@ -106,16 +126,29 @@ String channel_str_arr[NUM_CHANNELS] = {
   "Back","LD/TV", "CD", "PHONO", "VIDEO AUX", "TUNER", "VCR1", "VCR2"
 };
 
-const int NUM_EFFECTS = 9;
+String channleCMD_str_arr[NUM_CHANNELS] = {
+  "DUMMY", "ld/tv", "cd", "phono", "video_aux", "tuner", "vcr1", "vrc2"
+};
+
+const int NUM_EFFECTS = 11;
 String effect_str_arr[NUM_EFFECTS] = {
-  "Back","SETTINGS", "ENHANCED", "CONCERT HALL", "CONCERT VIDEO",
+  "Back","Effect ON/OFF", "SETTINGS","PROLOGIC", "ENHANCED", "CONCERT HALL", "CONCERT VIDEO",
   "ROCK CONCERT", "DISCO", "MONO MOVIE", "STADIUM"
+};
+
+String effectCMD_str_arr[NUM_EFFECTS] = {
+  "DUMMY", "effect_on_off", "DUMMY", "prologic", "enhanced", "concert_hall", "concert_video", 
+  "rock_concert", "disco", "mono_movie", "stadium"
 };
 
 const int NUM_TEST_DELAY_CENTER_REAR = 5;
 String test_delay_center_rear_str_arr[NUM_TEST_DELAY_CENTER_REAR] = {
   "Back", "TEST", "DELAY", "CENTER", "REAR"
 };
+
+//
+// EFFECT SETTING CMD IMPLAMATATION
+//
 
 const int NUM_STARTMENU = 2;
 String startmenu_str_arr[NUM_STARTMENU] = {
@@ -231,7 +264,7 @@ void startmenu_selection_cases(){
 
 void effectmenu_selection_cases(){
   if(is_in_effectmenu && !is_in_test_delay_center_rearmenu){
-        if(current_selected_item == 1){
+        if(current_selected_item == 2){
           is_in_test_delay_center_rearmenu = true;
           current_selected_item = 0;
           last_selected_item = 0;
@@ -247,7 +280,7 @@ void effectmenu_selection_cases(){
           draw_menu(effect_str_arr, NUM_EFFECTS);
         }else if (current_selected_item == 1){
           //
-          // TEST BUTON IMPLEMETATION
+          // TEST BUTTON IMPLEMETATION
           //
         }else if(current_selected_item == 2 || current_selected_item == 3 || current_selected_item == 4){
           aranage_settings_with_encoder = true;
@@ -265,6 +298,13 @@ void handle_menu_navigation(String menu[], int NUM_ITEMS){
       startmenu_selection_cases();
       effectmenu_selection_cases();
       if(current_selected_item != 0 && !is_in_startmenu){
+
+        // Very UGLY IMPLAMANTATION
+        if(is_in_channelmenu){
+          send_command(channleCMD_str_arr[current_selected_item]);
+        }else if(is_in_effectmenu){
+          send_command(effectCMD_str_arr[current_selected_item]);
+        }
         draw_feedback(" Transmit: " + menu[current_selected_item]);
       }
       while(digitalRead(rotary_SW) == LOW) { delay(10); } 
@@ -314,26 +354,54 @@ void setup() {
   pinMode(rotary_CLK, INPUT_PULLUP);
   pinMode(rotary_DT, INPUT_PULLUP);
 
+  // WLAN & ESP-NOW starten
+  WiFi.mode(WIFI_STA);
+  
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Fehler bei ESP-NOW");
+    tft.setTextColor(ST77XX_RED);
+    tft.setCursor(10, 40);
+    tft.print("Funk-Fehler!");
+    return; // Abbruch bei Fehler
+  }
+
+  // Empfänger hinzufügen
+  memcpy(peerInfo.peer_addr, basemodule_mac, 6);
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Fehler Empfaenger");
+    tft.setTextColor(ST77XX_RED);
+    tft.setCursor(10, 40);
+    tft.print("Empfaenger fehlt!");
+    return;
+  }
+
+
   //Ecoder Ticker = some kinde of guard for noisdefelction
   encoderTicker.attach_ms(4, leseEncoder);
+  //Boot Screen
   screen_boot();
 }
 
 void loop() {
 
   if(digitalRead(BTN_POWER)== LOW){
-    //
-    // STANDBY IMPLIMANTATION
-    //
-
+    send_command("standby");
     draw_feedback(" Transmit: Standby");
   }
 
+  // it may be better to 
+  // count how many steps 
+  // you turn the Encoder 
+  // and than send the steps
+  // over to the Base Module
   if(turning_right == true){
     //
     // VOLUME UP IMPLIMANTATION
     //
     turning_right = false;
+    send_command("volume_up");
     draw_feedback(" Transmit: Volume UP");
   }
 
@@ -342,6 +410,7 @@ void loop() {
     // VOLUME UP IMPLIMANTATION
     //
     turning_left = false;
+    send_command("volume_down");
     draw_feedback(" Transmit: Volume DOWN");
   }
 
