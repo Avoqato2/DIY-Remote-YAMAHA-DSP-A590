@@ -3,6 +3,8 @@
 #include <Adafruit_GFX.h>           // Fonts and drawing lib
 #include <Adafruit_ST7789.h>        // Hardware-specific library for ST7789
 #include <map>                      // For mapping IR codes to strings
+#include <Ticker.h>
+Ticker encoderTicker; // Unser Timer für den Encoder
 
 // --------------------------------------------------------------------------------
 // ------------------------------Define Pins---------------------------------------
@@ -61,16 +63,7 @@ volatile bool turning_right = false;
 volatile bool turning_left = false;
 
 
-void IRAM_ATTR encoderISR() {
-  static unsigned long lastInterruptTime = 0;
-  unsigned long interruptTime = micros();
-
-  // Entprell-Filter: Ignoriere alles unter 1500 Mikrosekunden (1.5 ms)
-  if (interruptTime - lastInterruptTime < 1500) {
-    return;
-  }
-  lastInterruptTime = interruptTime;
-
+void leseEncoder() {
   static uint8_t old_AB = 3; 
   static int8_t encval = 0;
   static const int8_t enc_states[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
@@ -321,9 +314,8 @@ void setup() {
   pinMode(rotary_CLK, INPUT_PULLUP);
   pinMode(rotary_DT, INPUT_PULLUP);
 
-  attachInterrupt(digitalPinToInterrupt(rotary_CLK), encoderISR, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(rotary_DT), encoderISR, CHANGE);
-
+  //Ecoder Ticker = some kinde of guard for noisdefelction
+  encoderTicker.attach_ms(4, leseEncoder);
   screen_boot();
 }
 
