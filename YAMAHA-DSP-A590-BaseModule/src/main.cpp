@@ -13,7 +13,7 @@ const char* password = "***REMOVED***";
 // Infrared pin for the ESP8266 D1 Mini (GPIO2)
 const int IR_SEND_PIN = D2; 
 
-// --- NEU: LOG-SYSTEM ---
+// --- LOG-SYSTEM ---
 String logBuffer = ""; // Hier speichern wir die Log-Einträge
 
 void addLog(String message) {
@@ -51,29 +51,26 @@ AsyncWebSocket ws("/ws");
 
 unsigned long letzterWlanCheck = 0; 
 
-// --- ESP-NOW DATENSTRUKTUR ---
+// --- ESP-NOW DATENSTRUKTUR & PUFFER ---
 typedef struct struct_message {
     char command[32]; 
 } struct_message;
 
-struct_message incomingData;
+// Für sichere Übergabe vom Callback an den Hauptloop
+volatile bool newEspNowCommand = false;
+char pendingCommand[32] = {0};
 
-// --- ESP-NOW EMPFANGS-LOGIK ---
+// --- ESP-NOW EMPFANGS-LOGIK (Nur sichere Übergabe, keine Speicherallokation) ---
 void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
   struct_message payload;
   memcpy(&payload, incomingData, sizeof(payload));
   
-  String msg = String(payload.command);
-  
-  if (ir_codes.count(msg) > 0) {
-    IrSender.sendNEC(122, ir_codes[msg], 0);
-    addLog("ESP-NOW Empfang: " + msg + " -> IR gesendet"); 
-  } else {
-    addLog("ESP-NOW Fehler: Unbekannter Befehl '" + msg + "'");
-  }
+  strncpy(pendingCommand, payload.command, sizeof(pendingCommand) - 1);
+  pendingCommand[sizeof(pendingCommand) - 1] = '\0';
+  newEspNowCommand = true;
 }
 
-// --- HTML FRONTEND (Wieder gut lesbar formatiert) ---
+// --- HTML FRONTEND (1:1 unverändert) ---
 const char index_html[] PROGMEM = R"rawliteral(
 <!doctype html>
 <html lang="en">
@@ -404,13 +401,15 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
     
     if (ir_codes.count(msg) > 0) {
       IrSender.sendNEC(122, ir_codes[msg], 0);
-      addLog("Web-Befehl: " + msg); // Optional: Kann man auch auskommentieren, wenn es zu viel Spam wird
+      addLog("Web-Befehl: " + msg);
     }
   }
 }
 
 // --- SETUP ---
 void setup() {
+  logBuffer.reserve(2500); // 1. Speicherbereich fest reservieren gegen Heap-Fragmentierung
+
   Serial.begin(115200);
   delay(2000); 
   
@@ -422,7 +421,7 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true); 
   WiFi.persistent(false);      
-  WiFi.setSleepMode(WIFI_NONE_SLEEP); // <-- DIE LÖSUNG GEGEN DEN MODEM-SLEEP!
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
   WiFi.begin(ssid, password);
 
   int versuche = 0;
@@ -439,6 +438,7 @@ void setup() {
   }
 
   addLog("Erfolgreich verbunden! IP: " + WiFi.localIP().toString());
+  letzterWlanCheck = millis();
 
   // --- ESP-NOW SETUP ---
   if (esp_now_init() != 0) {
@@ -454,9 +454,8 @@ void setup() {
     request->send_P(200, "text/html", index_html);
   });
 
-  // Route 2: NEU - Das System-Logbuch!
+  // Route 2: Das System-Logbuch
   server.on("/log", HTTP_GET, [](AsyncWebServerRequest *request){
-    // Erstellt eine dunkle Seite, die das Log zeigt und sich alle 10 Sekunden selbst aktualisiert
     String html = "<html><head><meta charset='UTF-8'><meta http-equiv='refresh' content='10'></head>";
     html += "<body style='font-family:monospace; background-color:#121212; color:#0f0;'>";
     html += "<h2>System Logbuch</h2>";
@@ -476,21 +475,34 @@ unsigned long letzterLoopCheck = 0;
 
 // --- HAUPTSCHLEIFE ---
 void loop() {
+  // 2. ESP-NOW Befehl sofort im Hauptkontext ohne Blockade abarbeiten
+  if (newEspNowCommand) {
+    newEspNowCommand = false;
+    String msg = String(pendingCommand);
+    
+    if (ir_codes.count(msg) > 0) {
+      IrSender.sendNEC(122, ir_codes[msg], 0);
+      addLog("ESP-NOW Empfang: " + msg + " -> IR gesendet"); 
+    } else {
+      addLog("ESP-NOW Fehler: Unbekannter Befehl '" + msg + "'");
+    }
+  }
+
   unsigned long jetzt = millis();
 
-  // Alle 2 Sekunden ausführen (Gibt dem Chip Zeit zum Atmen!)
+  // Wartungs-Block alle 2 Sekunden
   if (jetzt - letzterLoopCheck >= 2000) {
-    
     ws.cleanupClients(); // Tote Verbindungen kappen
     
-    // WLAN-Wächter
+    // 3. WLAN-Wächter (Überlässt ESP den Reconnect; greift nur bei 5 Min Totalausfall hart ein)
     if (WiFi.status() != WL_CONNECTED) {
-      if (jetzt - letzterWlanCheck >= 30000) {
-        addLog("WLAN Verbindung verloren! Starte Reconnect...");
-        WiFi.disconnect();
-        WiFi.begin(ssid, password);
-        letzterWlanCheck = jetzt;
+      if (jetzt - letzterWlanCheck >= 300000) { // 5 Minuten
+        addLog("WLAN-Verbindung dauerhaft verloren! Not-Neustart...");
+        delay(1000);
+        ESP.restart();
       }
+    } else {
+      letzterWlanCheck = jetzt;
     }
     
     letzterLoopCheck = jetzt;
