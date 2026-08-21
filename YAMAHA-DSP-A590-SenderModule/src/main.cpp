@@ -17,7 +17,7 @@ Ticker encoderTicker; // Unser Timer für den Encoder
 #define display_DC  D2  // Data/command line for TFT display
 #define display_BKL D3  // Backlight
 #define display_SAD D8  // Serial data line for TFT display
-#define display_SCL D9  // Serial clock line for TFT display
+#define display_SCL D10  // Serial clock line for TFT display
 // --------------------------------------------------------------------------------
 // Rotary encoder Pins
 #define rotary_CLK  D4  // Rotary encoder CLK pin
@@ -27,7 +27,7 @@ Ticker encoderTicker; // Unser Timer für den Encoder
 // Button Pins
 #define BTN_POWER   D6  // Standby ON/OFF
 #define BTN_UP      D7  // Menu Up
-#define BTN_DOWN    D10 // Menu Down
+#define BTN_DOWN    D9 // Menu Down
 // --------------------------------------------------------------------------------
 // ------------------------------Define Pins---------------------------------------
 // --------------------------------------------------------------------------------
@@ -81,6 +81,9 @@ void send_command(String cmd) {
 volatile bool turning_right = false;
 volatile bool turning_left = false;
 
+volatile int times_turn_right = 0;
+volatile int times_turn_left = 0;
+
 
 void leseEncoder() {
   static uint8_t old_AB = 3; 
@@ -95,9 +98,11 @@ void leseEncoder() {
   
   if (encval > 3) { 
     turning_right = true;
+    times_turn_right++;
     encval = 0;
   } else if (encval < -3) { 
     turning_left = true;
+    times_turn_left++;
     encval = 0;
   }
 }
@@ -127,7 +132,7 @@ String channel_str_arr[NUM_CHANNELS] = {
 };
 
 String channleCMD_str_arr[NUM_CHANNELS] = {
-  "DUMMY", "ld/tv", "cd", "phono", "video_aux", "tuner", "vcr1", "vrc2"
+  "DUMMY", "ld/tv", "cd", "phono", "video_aux", "tuner", "vcr1", "vcr2"
 };
 
 const int NUM_EFFECTS = 11;
@@ -216,6 +221,9 @@ void draw_menu(String (menu[]), int NUM_ITEMS){
   }
 }
 
+unsigned long feedback_timer = 0;
+bool feedback_active = false;
+
 void draw_feedback(String text) {
   // draw what u selectet
   tft.fillRect(0, 210, 280, 30, ST77XX_BLUE);
@@ -224,12 +232,23 @@ void draw_feedback(String text) {
   tft.setTextSize(1);
   tft.print(text);
   
-  // delete what have been written
-  delay(800);
-  tft.fillRect(0, 210, 280, 30, ST77XX_BLACK);
-  
-  // Force to draw the menu again
-  last_selected_item = -1; 
+  // Timer starten & markieren, dass ein Feedback sichtbar ist
+  feedback_timer = millis();
+  feedback_active = true; 
+}
+
+void check_if_feedback_done(){
+  if (feedback_active == true) {
+    if (millis() - feedback_timer >= 800) {
+      // delete what have been written
+      tft.fillRect(0, 210, 280, 30, ST77XX_BLACK);
+      
+      // Force to draw the menu again
+      last_selected_item = -1; 
+      
+      feedback_active = false; // Timer ausschalten
+    }
+  }
 }
 
 void startmenu_selection_cases(){
@@ -378,7 +397,7 @@ void setup() {
   }
 
 
-  //Ecoder Ticker = some kinde of guard for noisdefelction
+  //Ecoder Ticker = some kinde of guard for nois reduction
   encoderTicker.attach_ms(4, leseEncoder);
   //Boot Screen
   screen_boot();
@@ -391,28 +410,44 @@ void loop() {
     draw_feedback(" Transmit: Standby");
   }
 
-  // it may be better to 
-  // count how many steps 
-  // you turn the Encoder 
-  // and than send the steps
-  // over to the Base Module
+  //-----------------------
+  //----Volume State-------
+  //-----------------------
   if(turning_right == true){
-    //
-    // VOLUME UP IMPLIMANTATION
-    //
     turning_right = false;
-    send_command("volume_up");
-    draw_feedback(" Transmit: Volume UP");
+    noInterrupts();
+    int steps_to_send = times_turn_right;
+    times_turn_right = 0;
+    interrupts();
+
+    if(steps_to_send > 0){
+      draw_feedback(" Transmit: Volume UP");
+      for(int i = 0; i < steps_to_send; i++){
+        send_command("volume_up");
+        delay(40);
+      }
+    }
   }
 
   if(turning_left == true){
-    //
-    // VOLUME UP IMPLIMANTATION
-    //
     turning_left = false;
-    send_command("volume_down");
-    draw_feedback(" Transmit: Volume DOWN");
+    noInterrupts();
+    int steps_to_send = times_turn_left;
+    times_turn_left = 0;
+    interrupts();
+
+    if(steps_to_send > 0){
+      draw_feedback(" Transmit: Volume DOWN");
+      for(int i= 0; i < steps_to_send; i++){
+        send_command("volume_down");
+        delay(40);
+      }
+    }
   }
+
+  //-----------------------
+  //----Volume State-------
+  //-----------------------
 
 
   //Startmenu State
@@ -434,5 +469,6 @@ void loop() {
     }
   }
 
+  check_if_feedback_done();
   delay(10);
 }
