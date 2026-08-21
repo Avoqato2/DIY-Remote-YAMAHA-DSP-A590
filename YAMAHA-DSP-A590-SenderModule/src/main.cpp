@@ -8,7 +8,10 @@
 #include <esp_now.h>                // ESP to ESP Kommunikation
 
 Ticker encoderTicker; // Unser Timer für den Encoder
-
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+//_________________________________________________________________________________
 // --------------------------------------------------------------------------------
 // ------------------------------Define Pins---------------------------------------
 // --------------------------------------------------------------------------------
@@ -31,23 +34,53 @@ Ticker encoderTicker; // Unser Timer für den Encoder
 // --------------------------------------------------------------------------------
 // ------------------------------Define Pins---------------------------------------
 // --------------------------------------------------------------------------------
-
-//unsigned long letzteAktivitaet = 0; // for later use, probaly for sleepmode
-
-//----------------------------------------------------------------
-//-----------------------State bools------------------------------
-//----------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+// --------------------------------------------------------------------------------
+//--------------------------------State bools--------------------------------------
+// --------------------------------------------------------------------------------
 bool is_in_startmenu = true;
 bool is_in_channelmenu = false;
 bool is_in_effectmenu = false;
 bool is_in_test_delay_center_rearmenu = false;
 bool effencts_are_on = false;
 bool aranage_settings_with_encoder = false;
-//----------------------------------------------------------------
-//-----------------------State bools------------------------------
-//----------------------------------------------------------------
+// --------------------------------------------------------------------------------
+//--------------------------------State bools--------------------------------------
+// --------------------------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+// --------------------------------------------------------------------------------
+//-----------------------------Deepsleep Section-----------------------------------
+// --------------------------------------------------------------------------------
+// must be up here cause of the Compliler
+Adafruit_ST7789 tft = Adafruit_ST7789(display_CS, display_DC, -1); // Create an instance of the display driver
 
+unsigned long lastaktivity = 0;
+const unsigned long TIMEOUT_MS = 10000;
 
+void do_deepsleep() {
+  WiFi.mode(WIFI_OFF); 
+  tft.fillScreen(ST77XX_BLACK); 
+  
+  // 1. Licht aus
+  digitalWrite(display_BKL, LOW);   
+  
+  // 2. Den Zustand (LOW) im Deep Sleep einfrieren!
+  gpio_hold_en((gpio_num_t)display_BKL);
+  gpio_deep_sleep_hold_en();
+  
+  tft.enableSleep(true);        
+
+  // Aufwecken über Encoder-Druck erlauben
+  esp_deep_sleep_enable_gpio_wakeup(1ULL << 2, ESP_GPIO_WAKEUP_GPIO_LOW);
+  esp_deep_sleep_start();       
+}
+// --------------------------------------------------------------------------------
+//-----------------------------Deepsleep Section-----------------------------------
+// --------------------------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
 // --------------------------------------------------------------------------------
 // ------------------------------ESP NOW Section-----------------------------------
 // --------------------------------------------------------------------------------
@@ -74,11 +107,11 @@ void send_command(String cmd) {
 // --------------------------------------------------------------------------------
 // ------------------------------ESP NOW Section-----------------------------------
 // --------------------------------------------------------------------------------
-
-
-//----------------------------------------------------------------
-//------------------Rotary Encoder Section------------------------
-//----------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+// --------------------------------------------------------------------------------
+//----------------------------Rotary Encoder Section-------------------------------
+// --------------------------------------------------------------------------------
 volatile bool turning_right = false;  //boolean for tirgger the right left Volume CMD
 volatile bool turning_left = false;
 
@@ -108,16 +141,14 @@ void leseEncoder() {
   }
 }
 
-//----------------------------------------------------------------
-//------------------Rotary Encoder Section------------------------
-//----------------------------------------------------------------
-
-
-//----------------------------------------------------------------
-//-----------------------Menu Section-----------------------------
-//----------------------------------------------------------------
-
-Adafruit_ST7789 tft = Adafruit_ST7789(display_CS, display_DC, -1); // Create an instance of the display driver
+// --------------------------------------------------------------------------------
+//----------------------------Rotary Encoder Section-------------------------------
+// --------------------------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+// --------------------------------------------------------------------------------
+//---------------------------------Menu Section------------------------------------
+// --------------------------------------------------------------------------------
 
 //-----------------------Menu variables----------------------------
 int current_selected_item = 0;  // Index of the currently selected item in the menu
@@ -151,10 +182,6 @@ const int NUM_TEST_DELAY_CENTER_REAR = 5;
 String test_delay_center_rear_str_arr[NUM_TEST_DELAY_CENTER_REAR] = {
   "Back", "TEST", "DELAY", "CENTER", "REAR"
 };
-
-//
-// EFFECT SETTING CMD IMPLAMATATION
-//
 
 const int NUM_STARTMENU = 2;
 String startmenu_str_arr[NUM_STARTMENU] = {
@@ -315,7 +342,7 @@ void effectmenu_selection_cases(){
 
 void handle_menu_navigation(String menu[], int NUM_ITEMS){
   if (digitalRead(rotary_SW) == LOW && !turning_left && !turning_right) {
-      // letzteAktivitaet = millis(); // for later use, probaly for sleepmode
+      lastaktivity = millis();
       startmenu_selection_cases();
       effectmenu_selection_cases();
 
@@ -340,14 +367,14 @@ void handle_menu_navigation(String menu[], int NUM_ITEMS){
     }
 
   if (digitalRead(BTN_UP) == LOW) {
-      // letzteAktivitaet = millis(); // for later use, probaly for sleepmode
+      lastaktivity = millis();
       current_selected_item--;
       if (current_selected_item < 0) current_selected_item = NUM_ITEMS -1;
       while(digitalRead(BTN_UP) == LOW) { delay(10); }
     }
 
     if (digitalRead(BTN_DOWN) == LOW) {
-      // letzteAktivitaet = millis(); // for later use, probaly for sleepmode
+      lastaktivity = millis();
       current_selected_item++;
       if (current_selected_item >= NUM_ITEMS) current_selected_item = 0; 
       while(digitalRead(BTN_DOWN) == LOW) { delay(10); }
@@ -364,13 +391,14 @@ void handle_menu_navigation(String menu[], int NUM_ITEMS){
   }
 }
 
-//----------------------------------------------------------------
-//-----------------------Menu Section-----------------------------
-//----------------------------------------------------------------
-
-//----------------------------------------------------------------
-//-----------------------Volume Section---------------------------
-//----------------------------------------------------------------
+// --------------------------------------------------------------------------------
+//---------------------------------Menu Section------------------------------------
+// --------------------------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+// --------------------------------------------------------------------------------
+//--------------------------------Volume Section-----------------------------------
+// --------------------------------------------------------------------------------
 
 void volume_logic(int right_or_left, String transmit_str,String volume_cmd){
   noInterrupts();
@@ -390,64 +418,79 @@ void volume_logic(int right_or_left, String transmit_str,String volume_cmd){
 void volume_check(){
   if(turning_right == true){
     turning_right = false;
+    lastaktivity = millis();
     volume_logic(times_turn_right, " Transmit: Volume UP", "volume_up");
   }
   
   if(turning_left == true){
     turning_left = false;
+    lastaktivity = millis();
     volume_logic(times_turn_left, " Transmit: Volume DOWN", "volume_down");
   }
 }
 
-//----------------------------------------------------------------
-//-----------------------Volume Section---------------------------
-//----------------------------------------------------------------
-
-//----------------------------------------------------------------
-//-------------------Effectsetting Section------------------------
-//----------------------------------------------------------------
+// --------------------------------------------------------------------------------
+//--------------------------------Volume Section-----------------------------------
+// --------------------------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+// --------------------------------------------------------------------------------
+//-----------------------------Effectsetting Section-------------------------------
+// --------------------------------------------------------------------------------
 void effectsetting_check(){
 if(current_selected_item == 2){
     if(turning_right == true){
       turning_right = false;
+      lastaktivity = millis();
       volume_logic(times_turn_right, " Transmit: Delay +", "delay_up");
     }
   
     if(turning_left == true){
       turning_left = false;
+      lastaktivity = millis();
       volume_logic(times_turn_left, " Transmit: Delay -", "delay_down");
     }
   } else if(current_selected_item == 3){
     if(turning_right == true){
       turning_right = false;
+      lastaktivity = millis();
       volume_logic(times_turn_right, " Transmit: Center +", "center_up");
     }
   
     if(turning_left == true){
       turning_left = false;
+      lastaktivity = millis();
       volume_logic(times_turn_left, " Transmit: Center -", "center_down");
     }
   } else if(current_selected_item == 4){
     if(turning_right == true){
       turning_right = false;
+      lastaktivity = millis();
       volume_logic(times_turn_right, " Transmit: Rear +", "rear_up");
     }
   
     if(turning_left == true){
       turning_left = false;
+      lastaktivity = millis();
       volume_logic(times_turn_left, " Transmit: Rear -", "rear_down");
     }
   }
 }
-//----------------------------------------------------------------
-//-------------------Effectsetting Section------------------------
-//----------------------------------------------------------------
-
+// --------------------------------------------------------------------------------
+//-----------------------------Effectsetting Section-------------------------------
+// --------------------------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+//_________________________________________________________________________________
 
 void setup() {
   // Communication speedbetween computer and arduino
   Serial.begin(115200);
-   // Setup for Backlight and turn it on
+  // if the gio_pin is still frozen wake it up
+  gpio_hold_dis((gpio_num_t)display_BKL);
+
+  // Setup for Backlight and turn it on
   pinMode(display_BKL, OUTPUT);
   digitalWrite(display_BKL, HIGH);
   //Button pins setup
@@ -487,6 +530,8 @@ void setup() {
   encoderTicker.attach_ms(4, leseEncoder);
   //Boot Screen
   screen_boot();
+
+  lastaktivity = millis();
 }
 
 void loop() {
@@ -523,5 +568,8 @@ void loop() {
   }
 
   check_if_feedback_done();
+  if(millis()-lastaktivity > TIMEOUT_MS){
+    do_deepsleep();
+  }
   delay(10);
 }
