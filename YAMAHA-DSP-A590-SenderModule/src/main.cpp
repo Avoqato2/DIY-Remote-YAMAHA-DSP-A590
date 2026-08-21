@@ -39,12 +39,14 @@ Ticker encoderTicker; // Unser Timer für den Encoder
 // --------------------------------------------------------------------------------
 //--------------------------------State bools--------------------------------------
 // --------------------------------------------------------------------------------
-bool is_in_startmenu = true;
-bool is_in_channelmenu = false;
-bool is_in_effectmenu = false;
-bool is_in_test_delay_center_rearmenu = false;
-bool effencts_are_on = false;
-bool aranage_settings_with_encoder = false;
+
+// RTC_DATA_ATTR is for "long time Memory", so the esp knows in what menu it is after waking up from deep sleep
+RTC_DATA_ATTR bool is_in_startmenu = true;
+RTC_DATA_ATTR bool is_in_channelmenu = false;
+RTC_DATA_ATTR bool is_in_effectmenu = false;
+RTC_DATA_ATTR bool is_in_test_delay_center_rearmenu = false;
+RTC_DATA_ATTR bool effencts_are_on = false;
+RTC_DATA_ATTR bool aranage_settings_with_encoder = false;
 // --------------------------------------------------------------------------------
 //--------------------------------State bools--------------------------------------
 // --------------------------------------------------------------------------------
@@ -188,7 +190,7 @@ String startmenu_str_arr[NUM_STARTMENU] = {
   "CHANNELS", "EFFECTS"
 };
 
-void screen_boot(){
+void screen_boot(bool cold_boot){
   // Setup for SPI
   // SCL Tikrate, -1 not used, SAD data, CS chip select.
   SPI.begin(display_SCL, -1, display_SAD, display_CS);
@@ -198,20 +200,22 @@ void screen_boot(){
   tft.setRotation(1);
   // Set Screen to full Black so any Pixelerrors are gone
   tft.fillScreen(ST77XX_BLACK);
-  // System Message
-  tft.setCursor(25, 100);
-  tft.setTextColor(ST77XX_ORANGE);
-  tft.setTextSize(2);
-  tft.print("System is booting...");
-  delay(2000);
-  tft.fillScreen(ST77XX_BLACK);
-  tft.setCursor(10, 100);
-  tft.print("YAMAHA DSP A590 REMOTE");
-  delay(2000);
-  tft.fillScreen(ST77XX_BLACK);
-  tft.setCursor(25, 100);
-  tft.print("Made by: @avoqato2");
-  delay(2000);
+  if(cold_boot == true){
+    // System Message
+    tft.setCursor(25, 100);
+    tft.setTextColor(ST77XX_ORANGE);
+    tft.setTextSize(2);
+    tft.print("System is booting...");
+    delay(2000);
+    tft.fillScreen(ST77XX_BLACK);
+    tft.setCursor(10, 100);
+    tft.print("YAMAHA DSP A590 REMOTE");
+    delay(2000);
+    tft.fillScreen(ST77XX_BLACK);
+    tft.setCursor(25, 100);
+    tft.print("Made by: @avoqato2");
+    delay(2000);
+  }
 }
 
 void draw_header(){
@@ -529,7 +533,15 @@ void setup() {
   //Ecoder Ticker = some kinde of guard for nois reduction
   encoderTicker.attach_ms(4, leseEncoder);
   //Boot Screen
-  screen_boot();
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+  
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) {
+    // show animation if you are booting
+    screen_boot(true);
+  } else {
+    // else skipp it
+    screen_boot(false);
+  }
 
   lastaktivity = millis();
 }
