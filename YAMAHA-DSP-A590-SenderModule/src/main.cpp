@@ -41,6 +41,7 @@ bool is_in_startmenu = true;
 bool is_in_channelmenu = false;
 bool is_in_effectmenu = false;
 bool is_in_test_delay_center_rearmenu = false;
+bool effencts_are_on = false;
 bool aranage_settings_with_encoder = false;
 //----------------------------------------------------------------
 //-----------------------State bools------------------------------
@@ -78,10 +79,10 @@ void send_command(String cmd) {
 //----------------------------------------------------------------
 //------------------Rotary Encoder Section------------------------
 //----------------------------------------------------------------
-volatile bool turning_right = false;
+volatile bool turning_right = false;  //boolean for tirgger the right left Volume CMD
 volatile bool turning_left = false;
 
-volatile int times_turn_right = 0;
+volatile int times_turn_right = 0; // Count how much many times we send the command
 volatile int times_turn_left = 0;
 
 
@@ -221,7 +222,7 @@ void draw_menu(String (menu[]), int NUM_ITEMS){
   }
 }
 
-unsigned long feedback_timer = 0;
+unsigned long feedback_timer = 0; // Variabls only for feedback
 bool feedback_active = false;
 
 void draw_feedback(String text) {
@@ -239,7 +240,7 @@ void draw_feedback(String text) {
 
 void check_if_feedback_done(){
   if (feedback_active == true) {
-    if (millis() - feedback_timer >= 800) {
+    if (millis() - feedback_timer >= 2000) {
       // delete what have been written
       tft.fillRect(0, 210, 280, 30, ST77XX_BLACK);
       
@@ -253,14 +254,14 @@ void check_if_feedback_done(){
 
 void startmenu_selection_cases(){
    if(is_in_startmenu){ // If we are in the start menu, check which item is selected and navigate accordingly
-        if(current_selected_item == 0){
+        if(current_selected_item == 0){ // go in to Channle menu
           is_in_startmenu = false;
           is_in_channelmenu = true;
           current_selected_item = 0;
           last_selected_item = 0;
           menu_offset = 0;
           draw_menu(channel_str_arr, NUM_CHANNELS);
-        } else if(current_selected_item == 1){
+        } else if(current_selected_item == 1){ // go into Effect menu
           is_in_startmenu = false;
           is_in_effectmenu = true;
           current_selected_item = 0;
@@ -282,32 +283,32 @@ void startmenu_selection_cases(){
 }
 
 void effectmenu_selection_cases(){
-  if(is_in_effectmenu && !is_in_test_delay_center_rearmenu){
-        if(current_selected_item == 2){
-          is_in_test_delay_center_rearmenu = true;
-          current_selected_item = 0;
-          last_selected_item = 0;
-          menu_offset = 0;
-          draw_menu(test_delay_center_rear_str_arr, NUM_TEST_DELAY_CENTER_REAR);
-        }
-      }else if(is_in_test_delay_center_rearmenu){
-        if(current_selected_item == 0){
-          is_in_test_delay_center_rearmenu = false;
-          current_selected_item = 0;
-          last_selected_item = 0;
-          menu_offset = 0;
-          draw_menu(effect_str_arr, NUM_EFFECTS);
-        }else if (current_selected_item == 1){
-          //
-          // TEST BUTTON IMPLEMETATION
-          //
-        }else if(current_selected_item == 2 || current_selected_item == 3 || current_selected_item == 4){
-          aranage_settings_with_encoder = true;
-          //
-          // Arange Delay/Center/Rear IMPLAMANTATION
-          //
-        }
-      }
+  if(is_in_effectmenu){ // if we are in the effectmenu check stuff
+    if(current_selected_item == 2 && effencts_are_on == true){ // Only enter "SETTINGS" if effects are on
+      is_in_test_delay_center_rearmenu = true;
+      is_in_effectmenu = false;
+      current_selected_item = 0;
+      last_selected_item = 0;
+      menu_offset = 0;
+      draw_menu(test_delay_center_rear_str_arr, NUM_TEST_DELAY_CENTER_REAR);
+    }else {
+      draw_feedback("Turn Effects ON!");
+    }
+  }else if(is_in_test_delay_center_rearmenu){ // if we are in the Effectsubmenu ("SETTINGS"), than do stuff
+    if(current_selected_item == 0){ // Go "BACK" to effectmenu 
+      is_in_test_delay_center_rearmenu = false;
+      is_in_effectmenu = true;
+      current_selected_item = 0;
+      last_selected_item = 0;
+      menu_offset = 0;
+      draw_menu(effect_str_arr, NUM_EFFECTS);
+    }else if (current_selected_item == 1){ // if we push the test setting fire the Command
+      send_command("test");
+      draw_feedback(" Transmit: Test"); 
+    }else if(current_selected_item == 2 || current_selected_item == 3 || current_selected_item == 4){
+      aranage_settings_with_encoder = true;
+    }
+  }
 }
 
 void handle_menu_navigation(String menu[], int NUM_ITEMS){
@@ -316,15 +317,23 @@ void handle_menu_navigation(String menu[], int NUM_ITEMS){
       // letzteAktivitaet = millis(); // for later use, probaly for sleepmode
       startmenu_selection_cases();
       effectmenu_selection_cases();
-      if(current_selected_item != 0 && !is_in_startmenu){
 
-        // Very UGLY IMPLAMANTATION
-        if(is_in_channelmenu){
+      // Only do Stuff if we are not on any "BACK" Options
+      // and not in the startmenu also not in the "SETTINGS"
+      if(current_selected_item != 0 && !is_in_startmenu && !is_in_test_delay_center_rearmenu){
+        if(is_in_channelmenu){ // Send Channal Commands
           send_command(channleCMD_str_arr[current_selected_item]);
-        }else if(is_in_effectmenu){
+          draw_feedback(" Transmit: " + menu[current_selected_item]);
+        }else if(is_in_effectmenu && current_selected_item != 2){ // fire only commands if we are not on the "Settings" Options
+          if(current_selected_item == 1){
+            effencts_are_on = !effencts_are_on; // if we press "EFFECT ON/OFF" revers Bool
+          } else
+          {
+            effencts_are_on = true; // in all other cases the Effect automaticly is on
+          }
           send_command(effectCMD_str_arr[current_selected_item]);
+          draw_feedback(" Transmit: " + menu[current_selected_item]);
         }
-        draw_feedback(" Transmit: " + menu[current_selected_item]);
       }
       while(digitalRead(rotary_SW) == LOW) { delay(10); } 
     }
@@ -357,6 +366,25 @@ void handle_menu_navigation(String menu[], int NUM_ITEMS){
 //----------------------------------------------------------------
 //-----------------------Menu Section-----------------------------
 //----------------------------------------------------------------
+
+//----------------------------------------------------------------
+//-----------------------Volume Section---------------------------
+//----------------------------------------------------------------
+
+void volume_logic(int right_or_left, String transmit_str,String volume_cmd){
+  noInterrupts();
+  int steps_to_send = right_or_left;
+  right_or_left = 0;
+  interrupts();
+
+  if(steps_to_send > 0){
+    draw_feedback(transmit_str);
+    for(int i = 0; i < steps_to_send; i++){
+      send_command(volume_cmd);
+      delay(40);
+    }
+  }
+}
 
 void setup() {
   // Communication speedbetween computer and arduino
@@ -410,64 +438,35 @@ void loop() {
     draw_feedback(" Transmit: Standby");
   }
 
-  //-----------------------
-  //----Volume State-------
-  //-----------------------
+  //----Volume States------
   if(turning_right == true){
     turning_right = false;
-    noInterrupts();
-    int steps_to_send = times_turn_right;
-    times_turn_right = 0;
-    interrupts();
-
-    if(steps_to_send > 0){
-      draw_feedback(" Transmit: Volume UP");
-      for(int i = 0; i < steps_to_send; i++){
-        send_command("volume_up");
-        delay(40);
-      }
-    }
+    volume_logic(times_turn_right, " Transmit: Volume UP", "volume_up");
   }
 
   if(turning_left == true){
     turning_left = false;
-    noInterrupts();
-    int steps_to_send = times_turn_left;
-    times_turn_left = 0;
-    interrupts();
-
-    if(steps_to_send > 0){
-      draw_feedback(" Transmit: Volume DOWN");
-      for(int i= 0; i < steps_to_send; i++){
-        send_command("volume_down");
-        delay(40);
-      }
-    }
+    volume_logic(times_turn_left, " Transmit: Volume DOWN", "volume_down");
   }
 
-  //-----------------------
-  //----Volume State-------
-  //-----------------------
-
-
-  //Startmenu State
+  //----Startmenu State----
   if (is_in_startmenu) {
     handle_menu_navigation(startmenu_str_arr, NUM_STARTMENU);
   }
 
-  //Channle State
+  //-----Channel State-----
   if(is_in_channelmenu) {
     handle_menu_navigation(channel_str_arr, NUM_CHANNELS);
   }
 
-  //Effect state
+  //-----Effect State-----
   if(is_in_effectmenu) {
-    if(is_in_test_delay_center_rearmenu){
-        handle_menu_navigation(test_delay_center_rear_str_arr, NUM_TEST_DELAY_CENTER_REAR);
-    } else {
-      handle_menu_navigation(effect_str_arr, NUM_EFFECTS);
-    }
+    handle_menu_navigation(effect_str_arr, NUM_EFFECTS);
   }
+  //-Effectsubmenu State--
+  if(is_in_test_delay_center_rearmenu){
+      handle_menu_navigation(test_delay_center_rear_str_arr, NUM_TEST_DELAY_CENTER_REAR);
+    }
 
   check_if_feedback_done();
   delay(10);
