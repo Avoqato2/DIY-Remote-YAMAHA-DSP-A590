@@ -6,9 +6,12 @@
 #include <map>
 #include <espnow.h> 
 
+#define ST(A) #A
+#define STR(A) ST(A)
+
 // WLAN Credentials
-const char* ssid = "VOR-Verstärker";
-const char* password = "***REMOVED***";
+const char* ssid = STR(WIFI_SSID);
+const char* password = STR(WIFI_PASS);
 
 // Infrared pin for the ESP8266 D1 Mini (GPIO2)
 const int IR_SEND_PIN = D2; 
