@@ -240,7 +240,7 @@ void draw_feedback(String text) {
 
 void check_if_feedback_done(){
   if (feedback_active == true) {
-    if (millis() - feedback_timer >= 2000) {
+    if (millis() - feedback_timer >= 1000) {
       // delete what have been written
       tft.fillRect(0, 210, 280, 30, ST77XX_BLACK);
       
@@ -291,12 +291,13 @@ void effectmenu_selection_cases(){
       last_selected_item = 0;
       menu_offset = 0;
       draw_menu(test_delay_center_rear_str_arr, NUM_TEST_DELAY_CENTER_REAR);
-    }else {
+    }else if(current_selected_item != 0){
       draw_feedback("Turn Effects ON!");
     }
   }else if(is_in_test_delay_center_rearmenu){ // if we are in the Effectsubmenu ("SETTINGS"), than do stuff
     if(current_selected_item == 0){ // Go "BACK" to effectmenu 
       is_in_test_delay_center_rearmenu = false;
+      aranage_settings_with_encoder = false; // Set it to false in case you leave this menu without setting it to false
       is_in_effectmenu = true;
       current_selected_item = 0;
       last_selected_item = 0;
@@ -306,13 +307,13 @@ void effectmenu_selection_cases(){
       send_command("test");
       draw_feedback(" Transmit: Test"); 
     }else if(current_selected_item == 2 || current_selected_item == 3 || current_selected_item == 4){
-      aranage_settings_with_encoder = true;
+      aranage_settings_with_encoder = !aranage_settings_with_encoder;
+      draw_feedback(" Disabled/Able: " + test_delay_center_rear_str_arr[current_selected_item]);
     }
   }
 }
 
 void handle_menu_navigation(String menu[], int NUM_ITEMS){
-
   if (digitalRead(rotary_SW) == LOW && !turning_left && !turning_right) {
       // letzteAktivitaet = millis(); // for later use, probaly for sleepmode
       startmenu_selection_cases();
@@ -386,6 +387,63 @@ void volume_logic(int right_or_left, String transmit_str,String volume_cmd){
   }
 }
 
+void volume_check(){
+  if(turning_right == true){
+    turning_right = false;
+    volume_logic(times_turn_right, " Transmit: Volume UP", "volume_up");
+  }
+  
+  if(turning_left == true){
+    turning_left = false;
+    volume_logic(times_turn_left, " Transmit: Volume DOWN", "volume_down");
+  }
+}
+
+//----------------------------------------------------------------
+//-----------------------Volume Section---------------------------
+//----------------------------------------------------------------
+
+//----------------------------------------------------------------
+//-------------------Effectsetting Section------------------------
+//----------------------------------------------------------------
+void effectsetting_check(){
+if(current_selected_item == 2){
+    if(turning_right == true){
+      turning_right = false;
+      volume_logic(times_turn_right, " Transmit: Delay +", "delay_up");
+    }
+  
+    if(turning_left == true){
+      turning_left = false;
+      volume_logic(times_turn_left, " Transmit: Delay -", "delay_down");
+    }
+  } else if(current_selected_item == 3){
+    if(turning_right == true){
+      turning_right = false;
+      volume_logic(times_turn_right, " Transmit: Center +", "center_up");
+    }
+  
+    if(turning_left == true){
+      turning_left = false;
+      volume_logic(times_turn_left, " Transmit: Center -", "center_down");
+    }
+  } else if(current_selected_item == 4){
+    if(turning_right == true){
+      turning_right = false;
+      volume_logic(times_turn_right, " Transmit: Rear +", "rear_up");
+    }
+  
+    if(turning_left == true){
+      turning_left = false;
+      volume_logic(times_turn_left, " Transmit: Rear -", "rear_down");
+    }
+  }
+}
+//----------------------------------------------------------------
+//-------------------Effectsetting Section------------------------
+//----------------------------------------------------------------
+
+
 void setup() {
   // Communication speedbetween computer and arduino
   Serial.begin(115200);
@@ -439,14 +497,10 @@ void loop() {
   }
 
   //----Volume States------
-  if(turning_right == true){
-    turning_right = false;
-    volume_logic(times_turn_right, " Transmit: Volume UP", "volume_up");
-  }
-
-  if(turning_left == true){
-    turning_left = false;
-    volume_logic(times_turn_left, " Transmit: Volume DOWN", "volume_down");
+  if(!aranage_settings_with_encoder){
+    volume_check();
+  } else if(aranage_settings_with_encoder == true){
+    effectsetting_check();
   }
 
   //----Startmenu State----
@@ -465,8 +519,8 @@ void loop() {
   }
   //-Effectsubmenu State--
   if(is_in_test_delay_center_rearmenu){
-      handle_menu_navigation(test_delay_center_rear_str_arr, NUM_TEST_DELAY_CENTER_REAR);
-    }
+    handle_menu_navigation(test_delay_center_rear_str_arr, NUM_TEST_DELAY_CENTER_REAR);
+  }
 
   check_if_feedback_done();
   delay(10);
