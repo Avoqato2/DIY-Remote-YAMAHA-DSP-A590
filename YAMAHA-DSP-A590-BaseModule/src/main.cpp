@@ -22,33 +22,47 @@
 // --------------------------------------------------------------------------------
 // ------------------------------Define Pins---------------------------------------
 // --------------------------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+// --------------------------------------------------------------------------------
+// -----------------------------W-LAN Section--------------------------------------
+// --------------------------------------------------------------------------------
 
-  // WLAN Credentials
-  const char* ssid = SECRET_SSID;
-  const char* password = SECRET_PASS;
+ // WLAN Credentials
+const char* ssid = SECRET_SSID;
+const char* password = SECRET_PASS;
 
-
-
-  // --- LOG-SYSTEM ---
-  String logBuffer = ""; // Hier speichern wir die Log-Einträge
-
-  void addLog(String message) {
-    // Berechne Laufzeit in Stunden, Minuten, Sekunden
-    unsigned long secs = millis() / 1000;
-    String timeStr = "[" + String(secs / 3600) + ":" + String((secs / 60) % 60) + ":" + String(secs % 60) + "] ";
-    
-    String newEntry = timeStr + message;
-    Serial.println(newEntry); // Weiterhin über USB ausgeben
-    
-    // Im RAM speichern (mit HTML-Zeilenumbruch)
-    logBuffer += newEntry + "<br>";
-
-    // Verhindern, dass der Arbeitsspeicher überläuft (maximal ~2000 Zeichen behalten)
-    if (logBuffer.length() > 2000) {
-      int cutPos = logBuffer.indexOf("<br>") + 4;
-      logBuffer = logBuffer.substring(cutPos);
+void wlan_setup(){
+    Serial.println("-----start W-LAN connection-----");
+  
+    WiFi.mode(WIFI_STA);  // connect to WLAN like a Phone for an IP-Adress
+    WiFi.setAutoReconnect(true);  // ESP reconnect automaticly
+    WiFi.persistent(false); // prevents that esp saves pwd and ssid in flash drive.
+    WiFi.setSleepMode(WIFI_NONE_SLEEP); // prevents that the esp lets the wifi module go in to sleep mode, 
+                                        //so that it is always availble with no delay
+    WiFi.begin(ssid,password);  // connection with SSID, PWD
+    // Stay in while till we are connected
+    int trys = 0;
+    while (WiFi.status() != WL_CONNECTED && trys < 40) {
+      delay(500);
+      Serial.print(".");
+      trys++;
     }
-  }
+
+    // Restart if the Connection is invalide
+    if (WiFi.status() != WL_CONNECTED) {
+      delay(1000);
+      ESP.restart(); 
+    }
+
+    Serial.println();
+    Serial.println("Succesfully connected!");
+    Serial.print("IP-Adress: ");
+    Serial.println(WiFi.localIP());
+}
+// --------------------------------------------------------------------------------
+// -----------------------------W-LAN Section--------------------------------------
+// --------------------------------------------------------------------------------
 
   // Infrared codes for AMP
   std::map<String, int> ir_codes = {
@@ -60,150 +74,59 @@
     {"prologic", 136}, {"enhanced", 137}, {"concert_hall", 141}, {"concert_video", 138},
     {"rock_concert", 140}, {"disco", 143}, {"mono_movie", 139}, {"stadium", 142}
   };
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+// --------------------------------------------------------------------------------
+// -----------------------Webserver&Websocket Section------------------------------
+// --------------------------------------------------------------------------------
 
-  // --- SERVER & STATUS ---
-  AsyncWebServer server(80);
-  AsyncWebSocket ws("/ws");
+  AsyncWebServer server(80); // start Webserver on port standard 80
+  AsyncWebSocket ws("/ws"); 
 
-  unsigned long letzterWlanCheck = 0; 
-
-  // --- ESP-NOW DATENSTRUKTUR & PUFFER ---
-  typedef struct struct_message {
-      char command[32]; 
-  } struct_message;
-
-  // Für sichere Übergabe vom Callback an den Hauptloop
-  volatile bool newEspNowCommand = false;
-  char pendingCommand[32] = {0};
-
-  // --- ESP-NOW EMPFANGS-LOGIK (Nur sichere Übergabe, keine Speicherallokation) ---
-  void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
-    struct_message payload;
-    memcpy(&payload, incomingData, sizeof(payload));
-    
-    strncpy(pendingCommand, payload.command, sizeof(pendingCommand) - 1);
-    pendingCommand[sizeof(pendingCommand) - 1] = '\0';
-    newEspNowCommand = true;
-  }
-
-  // --- HTML FRONTEND (1:1 unverändert) ---
-
-  // --- WEBSOCKET LOGIK ---
-  void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-    if (type == WS_EVT_CONNECT) {
-      addLog("Web-Client verbunden: IP " + client->remoteIP().toString());
-    } else if (type == WS_EVT_DISCONNECT) {
-      addLog("Web-Client getrennt");
-    } else if (type == WS_EVT_DATA) {
+  //  AsyncWebSocket *server        ->  ....
+  //  AsyncWebSocketClient *client  ->  Who is causing the event
+  //  AwsEventType type             ->  What happend? Connect, disconnet, Message
+  //  void *arg                     ->  reseved memory for Big transfers, it does not matter, but it has to be in () for the complier
+  //  uint8_t *data                 ->  data as in what comes for a mesage
+  //  size_t len                    ->  How long is the message
+ void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+    if (type == WS_EVT_CONNECT) {           //do stuff on connedtion
+      Serial.println("client is connected");
+    } 
+    else if (type == WS_EVT_DISCONNECT) {   // do stuff on disconnection
+      Serial.println("client disconnected");
+    } 
+    else if (type == WS_EVT_DATA) {   // do stuff on data
       data[len] = 0;
       String msg = (char*)data;
       
       if (ir_codes.count(msg) > 0) {
         IrSender.sendNEC(122, ir_codes[msg], 0);
-        addLog("Web-Befehl: " + msg);
+        Serial.println("Reseved CMD:"+ msg);
       }
     }
   }
 
-  // --- SETUP ---
+// --------------------------------------------------------------------------------
+// -----------------------Webserver&Websocket Section------------------------------
+// --------------------------------------------------------------------------------
   void setup() {
-    logBuffer.reserve(2500); // 1. Speicherbereich fest reservieren gegen Heap-Fragmentierung
-
     Serial.begin(115200);
-    delay(2000); 
-    
-    IrSender.begin(IR_SEND_PIN);
-    
-    addLog("System gestartet.");
-    addLog("Verbinde mit WLAN: " + String(ssid));
-    
-    WiFi.mode(WIFI_STA);
-    WiFi.setAutoReconnect(true); 
-    WiFi.persistent(false);      
-    WiFi.setSleepMode(WIFI_NONE_SLEEP);
-    WiFi.begin(ssid, password);
+    delay(2000); // Wait till Serial monitor is Ready
+    //start W-Lan Connection
+    wlan_setup();
 
-    int versuche = 0;
-    while (WiFi.status() != WL_CONNECTED && versuche < 40) {
-      delay(500);
-      Serial.print(".");
-      versuche++;
-    }
-
-    if (WiFi.status() != WL_CONNECTED) {
-      addLog("WLAN-Timeout! Modul startet neu...");
-      delay(1000);
-      ESP.restart(); 
-    }
-
-    addLog("Erfolgreich verbunden! IP: " + WiFi.localIP().toString());
-    letzterWlanCheck = millis();
-
-    // --- ESP-NOW SETUP ---
-    if (esp_now_init() != 0) {
-      addLog("Fehler bei ESP-NOW Init!");
-    } else {
-      esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
-      esp_now_register_recv_cb(OnDataRecv);
-      addLog("ESP-NOW bereit. MAC: " + WiFi.macAddress());
-    }
-
-    // Route 1: Die normale Fernbedienung
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
       request->send_P(200, "text/html", HTML);
     });
 
-    // Route 2: Das System-Logbuch
-    server.on("/log", HTTP_GET, [](AsyncWebServerRequest *request){
-      String html = "<html><head><meta charset='UTF-8'><meta http-equiv='refresh' content='10'></head>";
-      html += "<body style='font-family:monospace; background-color:#121212; color:#0f0;'>";
-      html += "<h2>System Logbuch</h2>";
-      html += logBuffer;
-      html += "</body></html>";
-      request->send(200, "text/html", html);
-    });
-
-    ws.onEvent(onEvent);
-    server.addHandler(&ws);
+    ws.onEvent(on_event);    // giving the on Evnet as callback
+    server.addHandler(&ws); // & symbol means that the server gets the adress for the Websocket and not the whole object
 
     server.begin();
-    addLog("Webserver gestartet.");
   }
 
-  unsigned long letzterLoopCheck = 0;
 
-  // --- HAUPTSCHLEIFE ---
   void loop() {
-    // 2. ESP-NOW Befehl sofort im Hauptkontext ohne Blockade abarbeiten
-    if (newEspNowCommand) {
-      newEspNowCommand = false;
-      String msg = String(pendingCommand);
-      
-      if (ir_codes.count(msg) > 0) {
-        IrSender.sendNEC(122, ir_codes[msg], 0);
-        addLog("ESP-NOW Empfang: " + msg + " -> IR gesendet"); 
-      } else {
-        addLog("ESP-NOW Fehler: Unbekannter Befehl '" + msg + "'");
-      }
-    }
-
-    unsigned long jetzt = millis();
-
-    // Wartungs-Block alle 2 Sekunden
-    if (jetzt - letzterLoopCheck >= 2000) {
-      ws.cleanupClients(); // Tote Verbindungen kappen
-      
-      // 3. WLAN-Wächter (Überlässt ESP den Reconnect; greift nur bei 5 Min Totalausfall hart ein)
-      if (WiFi.status() != WL_CONNECTED) {
-        if (jetzt - letzterWlanCheck >= 300000) { // 5 Minuten
-          addLog("WLAN-Verbindung dauerhaft verloren! Not-Neustart...");
-          delay(1000);
-          ESP.restart();
-        }
-      } else {
-        letzterWlanCheck = jetzt;
-      }
-      
-      letzterLoopCheck = jetzt;
-    }
+   ws.cleanupClients();
   }
