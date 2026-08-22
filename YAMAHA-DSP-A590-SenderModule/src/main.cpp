@@ -549,8 +549,14 @@ void setup() {
 void loop() {
 
   if(digitalRead(BTN_POWER)== LOW){
-    send_command("standby");
-    draw_feedback(" Transmit: Standby");
+    delay(40);
+    if(digitalRead(BTN_POWER)== LOW){
+      delay(40);
+      lastaktivity = millis();
+      send_command("standby");
+      draw_feedback(" Transmit: Standby");
+      delay(40);
+    } 
   }
 
   //----Volume States------
