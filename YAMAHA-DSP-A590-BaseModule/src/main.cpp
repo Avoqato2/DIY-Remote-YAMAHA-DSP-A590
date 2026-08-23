@@ -2,6 +2,7 @@
   #include <ESP8266WiFi.h>        // Specific ESP32 D1 Mini wfif-lib
   #include <ESPAsyncTCP.h>        // Async lib for javascript i think
   #include <ESPAsyncWebServer.h>  // Webserver lib
+  #include <ESP8266mDNS.h>        // For Multicast DNS settings 
   #include <IRremote.hpp>         // Infrared lib
   #include <map>                  // Map lib for organizing IR-Codes
   #include <espnow.h>             // esp now Lib
@@ -57,8 +58,6 @@ void wlan_setup(){
 
     Serial.println();
     Serial.println("Succesfully connected!");
-    Serial.print("IP-Adress: ");
-    Serial.println(WiFi.localIP());
 }
 // --------------------------------------------------------------------------------
 // -----------------------------W-LAN Section--------------------------------------
@@ -102,20 +101,12 @@ void wlan_setup(){
       
       if (ir_codes.count(msg) > 0) {
         IrSender.sendNEC(122, ir_codes[msg], 0);
-        Serial.println("Reseved CMD:"+ msg);
+        Serial.println("Reseaved CMD:"+ msg);
       }
     }
   }
 
-// --------------------------------------------------------------------------------
-// -----------------------Webserver&Websocket Section------------------------------
-// --------------------------------------------------------------------------------
-  void setup() {
-    Serial.begin(115200);
-    delay(2000); // Wait till Serial monitor is Ready
-    //start W-Lan Connection
-    wlan_setup();
-
+  void webserver_and_websocket_setup(){
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
       request->send_P(200, "text/html", HTML);
     });
@@ -124,9 +115,67 @@ void wlan_setup(){
     server.addHandler(&ws); // & symbol means that the server gets the adress for the Websocket and not the whole object
 
     server.begin();
+    MDNS.begin("amp-remote");
+  }
+
+// --------------------------------------------------------------------------------
+// -----------------------Webserver&Websocket Section------------------------------
+// --------------------------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+// --------------------------------------------------------------------------------
+// -----------------------------ESP-NOW Section------------------------------------
+// --------------------------------------------------------------------------------
+
+typedef struct struct_message {
+    char command[32]; 
+} struct_message;
+
+
+volatile bool new_esp_now_command = false;
+char pending_command[32] = {0};
+
+void on_data_recv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
+  struct_message payload;
+  memcpy(&payload, incomingData, sizeof(payload));
+  
+  strncpy(pending_command, payload.command, sizeof(pending_command) - 1);
+  pending_command[sizeof(pending_command) - 1] = '\0';
+  new_esp_now_command = true;
+}
+// --------------------------------------------------------------------------------
+// -----------------------------ESP-NOW Section------------------------------------
+// --------------------------------------------------------------------------------
+
+  void setup() {
+    Serial.begin(115200);
+    delay(2000); // Wait till Serial monitor is Ready
+
+    IrSender.begin(IR_SEND_PIN); // IR_Sender init
+
+    //start W-Lan Connection
+    wlan_setup();
+
+    if(esp_now_init() != 0){
+      ESP.restart();
+    }else{
+      esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
+      esp_now_register_recv_cb(on_data_recv);
+    }
+
+    webserver_and_websocket_setup();
   }
 
 
   void loop() {
-   ws.cleanupClients();
+  if (new_esp_now_command) {
+    new_esp_now_command = false;
+    String msg = String(pending_command);
+    
+    if (ir_codes.count(msg) > 0) {
+      IrSender.sendNEC(122, ir_codes[msg], 0);
+    }
+  }
+  ws.cleanupClients();
+  MDNS.update();
   }
