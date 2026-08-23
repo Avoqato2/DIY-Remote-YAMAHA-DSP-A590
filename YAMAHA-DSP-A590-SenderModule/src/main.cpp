@@ -5,7 +5,9 @@
 #include <map>                      // For mapping IR codes to strings
 #include <Ticker.h>                 // For encoder Guard
 #include <WiFi.h>
+#include <esp_wifi.h>               // For WLAN channel changing
 #include <esp_now.h>                // ESP to ESP Kommunikation
+#include "secrets.h"                // WLAN credentials 
 
 Ticker encoderTicker; // Unser Timer für den Encoder
 //_________________________________________________________________________________
@@ -84,7 +86,30 @@ void do_deepsleep() {
 //_________________________________________________________________________________
 //_________________________________________________________________________________
 // --------------------------------------------------------------------------------
-// ------------------------------ESP NOW Section-----------------------------------
+//---------------------------Draw Feedback Section---------------------------------
+// --------------------------------------------------------------------------------
+unsigned long feedback_timer = 0; // Variabls only for feedback
+bool feedback_active = false;
+
+void draw_feedback(String text) {
+  // draw what u selectet
+  tft.fillRect(0, 210, 280, 30, ST77XX_BLUE);
+  tft.setCursor(50, 218);
+  tft.setTextColor(ST77XX_WHITE);
+  tft.setTextSize(1);
+  tft.print(text);
+  
+  // Timer starten & markieren, dass ein Feedback sichtbar ist
+  feedback_timer = millis();
+  feedback_active = true; 
+}
+// --------------------------------------------------------------------------------
+//---------------------------Draw Feedback Section---------------------------------
+// --------------------------------------------------------------------------------
+//_________________________________________________________________________________
+//_________________________________________________________________________________
+// --------------------------------------------------------------------------------
+//---------------------------ESP-Now&SYNC Section----------------------------------
 // --------------------------------------------------------------------------------
 uint8_t basemodule_mac[] = {0xC8, 0xC9, 0xA3, 0x25, 0x3F, 0x02};
 
@@ -95,19 +120,91 @@ typedef struct struct_message {
 struct_message myData;
 esp_now_peer_info_t peerInfo;
 
+const char* ssid = SECRET_SSID;
+const char* password = SECRET_PASS;
+
+RTC_DATA_ATTR int saved_channel = 0; 
+
+volatile bool paket_send = false;
+volatile bool paket_succsess = false;
+
+// checking if we have an ESP-NOW Receaver
+void on_data_sent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  paket_succsess = (status == ESP_NOW_SEND_SUCCESS);
+  paket_send = true; 
+}
+
+void sync_wifi_channel() {
+  draw_feedback("Syncing WiFi...");
+  
+  WiFi.begin(ssid, password);
+  
+  int trys = 0;
+  while (WiFi.status() != WL_CONNECTED && trys < 15) { 
+    delay(500);
+    trys++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    saved_channel = WiFi.channel(); // channel found
+    Serial.println("Neuer Kanal gefunden: " + String(saved_channel)); /////// TEMP
+    
+    // Disconnect from WLAN
+    WiFi.disconnect(); 
+  } else {
+    Serial.println("Router nicht gefunden! Fallback auf Kanal 1.");
+    saved_channel = 1; // fall back on standart channel
+  }
+}
+
 void send_command(String cmd) {
   strncpy(myData.command, cmd.c_str(), sizeof(myData.command));
-  esp_err_t result = esp_now_send(basemodule_mac, (uint8_t *) &myData, sizeof(myData));
   
-  if (result == ESP_OK) {
-    Serial.println("Gesendet: " + cmd);
+  paket_send = false;
+  esp_now_send(basemodule_mac, (uint8_t *) &myData, sizeof(myData));
+
+  // wait untill the reveaver check is positive
+  unsigned long start_time = millis();
+  while (!paket_send && millis() - start_time < 100) { delay(1); }
+
+  // leave on succses
+  if (paket_succsess) {
+    Serial.println("Gesendet auf Kanal " + String(saved_channel) + ": " + cmd);
+    return;
+  }
+  // now finde the reveaver
+  draw_feedback("ERROR: Syncing WiFi...");
+
+  
+  sync_wifi_channel(); // Find channel
+  
+  // new Channel setup
+  esp_wifi_set_promiscuous(true);
+  esp_wifi_set_channel(saved_channel, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_promiscuous(false);
+
+  // save new channel in esp now settings
+  peerInfo.channel = saved_channel;
+  esp_now_mod_peer(&peerInfo); 
+
+  // last check if receaver is there
+  paket_send = false;
+  esp_now_send(basemodule_mac, (uint8_t *) &myData, sizeof(myData));
+
+  // wait untill the reveaver check is positive
+  start_time = millis();
+  while (!paket_send && millis() - start_time < 100) { delay(1); }
+
+  if (paket_succsess) {
+    Serial.println("Nach Sync gesendet auf Kanal " + String(saved_channel) + ": " + cmd);
   } else {
-    Serial.println("Fehler beim Senden!");
+    Serial.println("Fehler: Basisstation ist offline!");
+    draw_feedback("Error: Offline");
   }
 }
 
 // --------------------------------------------------------------------------------
-// ------------------------------ESP NOW Section-----------------------------------
+//---------------------------ESP-Now&SYNC Section----------------------------------
 // --------------------------------------------------------------------------------
 //_________________________________________________________________________________
 //_________________________________________________________________________________
@@ -253,21 +350,6 @@ void draw_menu(String (menu[]), int NUM_ITEMS){
   }
 }
 
-unsigned long feedback_timer = 0; // Variabls only for feedback
-bool feedback_active = false;
-
-void draw_feedback(String text) {
-  // draw what u selectet
-  tft.fillRect(0, 210, 280, 30, ST77XX_BLUE);
-  tft.setCursor(50, 218);
-  tft.setTextColor(ST77XX_WHITE);
-  tft.setTextSize(1);
-  tft.print(text);
-  
-  // Timer starten & markieren, dass ein Feedback sichtbar ist
-  feedback_timer = millis();
-  feedback_active = true; 
-}
 
 void check_if_feedback_done(){
   if (feedback_active == true) {
@@ -404,7 +486,7 @@ void handle_menu_navigation(String menu[], int NUM_ITEMS){
 //--------------------------------Volume Section-----------------------------------
 // --------------------------------------------------------------------------------
 
-void volume_logic(int right_or_left, String transmit_str,String volume_cmd){
+void volume_logic(volatile int &right_or_left, String transmit_str,String volume_cmd){
   noInterrupts();
   int steps_to_send = right_or_left;
   right_or_left = 0;
@@ -502,36 +584,10 @@ void setup() {
   pinMode(BTN_DOWN, INPUT_PULLUP);
   pinMode(BTN_POWER, INPUT_PULLUP);
   //Rotary pins setup
-  pinMode(rotary_SW, INPUT_PULLUP);
-  pinMode(rotary_CLK, INPUT_PULLUP);
-  pinMode(rotary_DT, INPUT_PULLUP);
+  pinMode(rotary_SW, INPUT);
+  pinMode(rotary_CLK, INPUT);
+  pinMode(rotary_DT, INPUT);
 
-  // WLAN & ESP-NOW starten
-  WiFi.mode(WIFI_STA);
-  
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Fehler bei ESP-NOW");
-    tft.setTextColor(ST77XX_RED);
-    tft.setCursor(10, 40);
-    tft.print("Funk-Fehler!");
-    return; // Abbruch bei Fehler
-  }
-
-  // Empfänger hinzufügen
-  memcpy(peerInfo.peer_addr, basemodule_mac, 6);
-  peerInfo.channel = 0;  
-  peerInfo.encrypt = false;
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Fehler Empfaenger");
-    tft.setTextColor(ST77XX_RED);
-    tft.setCursor(10, 40);
-    tft.print("Empfaenger fehlt!");
-    return;
-  }
-
-
-  //Ecoder Ticker = some kinde of guard for nois reduction
-  encoderTicker.attach_ms(4, leseEncoder);
   //Boot Screen
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   
@@ -542,6 +598,38 @@ void setup() {
     // else skipp it
     screen_boot(false);
   }
+
+  // WLAN & ESP-NOW starten
+  WiFi.mode(WIFI_STA);
+
+  // On cold start
+  if (saved_channel == 0) {
+    sync_wifi_channel();
+  }
+
+  // Set esp WLAN Channal on found Channal
+  esp_wifi_set_promiscuous(true);
+  esp_wifi_set_channel(saved_channel, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_promiscuous(false);
+
+  if (esp_now_init() != ESP_OK) {
+    draw_feedback(" ERROR: RESTART...");
+    delay(1000);
+    ESP.restart();
+  }
+
+  // Setup receaver check
+  esp_now_register_send_cb(on_data_sent);
+
+  // give the espnow funktions all of the credentials
+  memcpy(peerInfo.peer_addr, basemodule_mac, 6);
+  peerInfo.channel = saved_channel;  
+  peerInfo.encrypt = false;
+  esp_now_add_peer(&peerInfo);
+
+
+  //Ecoder Ticker = some kind of guard for nois reduction
+  encoderTicker.attach_ms(4, leseEncoder);
 
   lastaktivity = millis();
 }
