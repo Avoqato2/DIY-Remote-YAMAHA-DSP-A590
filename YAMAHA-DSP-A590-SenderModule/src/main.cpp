@@ -580,9 +580,9 @@ void setup() {
   pinMode(display_BKL, OUTPUT);
   digitalWrite(display_BKL, HIGH);
   //Button pins setup
-  pinMode(BTN_UP, INPUT_PULLUP);
-  pinMode(BTN_DOWN, INPUT_PULLUP);
-  pinMode(BTN_POWER, INPUT_PULLUP);
+  pinMode(BTN_UP, INPUT);
+  pinMode(BTN_DOWN, INPUT);
+  pinMode(BTN_POWER, INPUT);
   //Rotary pins setup
   pinMode(rotary_SW, INPUT);
   pinMode(rotary_CLK, INPUT);
