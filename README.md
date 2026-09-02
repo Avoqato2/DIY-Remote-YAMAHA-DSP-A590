@@ -1,6 +1,6 @@
 # DIY-Remote YAMAHA DSP-A590
 
-hois README.md file and some of the code were written with the help of AI. Be graceful to me, this is my first C++ and Arduino project.
+This README.md file and some of the code were written with the help of AI. Be graceful to me, this is my first C++ and Arduino project.
 
 ![Platform](https://img.shields.io/badge/platform-ESP32-blue.svg)
 ![Framework](https://img.shields.io/badge/framework-Arduino-00979C.svg)
