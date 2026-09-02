@@ -1,6 +1,6 @@
 # DIY-Remote YAMAHA DSP-A590
 
-hois README.md file and some of the code were written with the help of AI. Be graceful to me, this is my first C++ and Arduino project.
+This README.md file and some of the code were written with the help of AI. Be graceful to me, this is my first C++ and Arduino project.
 
 ![Platform](https://img.shields.io/badge/platform-ESP32-blue.svg)
 ![Framework](https://img.shields.io/badge/framework-Arduino-00979C.svg)
@@ -41,18 +41,20 @@ A custom, self-developed remote control system for the YAMAHA DSP-A590 amplifier
 
 - [ ] 1x ESP32 (Base Station Controller)
 - [ ] 1x USB-C port
-- [ ]1x Infrared LED
-- [ ]1x suitable resister for LED ## Schematics & Wiring
+- [ ] 1x Infrared LED
+- [ ] 1x suitable resister for LED
+
+## Schematics & Wiring
 
 ### Transmitter Module (Remote)
 
 ![Transmitter Schematic](circuits/circuit_transimtter_Module.jpg)
-_Fig 1: Schematic for the remote control module including hardware debouncing._
+_Pig 1: Schematic for the remote control module including hardware debouncing._
 
 ### Receiver Module (Base Station)
 
 ![Base Module Schematic](circuits/circuit_Base_Module.jpg)
-\_Fig 2: Schematic for the base station connected to the YAMAHA DSP-A590.`)
+_Pig 2: Schematic for the base station connected to the YAMAHA DSP-A590._
 
 ## Getting Started
 
