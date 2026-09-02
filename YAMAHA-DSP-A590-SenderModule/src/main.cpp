@@ -231,11 +231,11 @@ void leseEncoder() {
   
   if (encval > 3) { 
     turning_right = true;
-    times_turn_right++;
+    times_turn_right+=2;
     encval = 0;
   } else if (encval < -3) { 
     turning_left = true;
-    times_turn_left++;
+    times_turn_left+=2;
     encval = 0;
   }
 }
