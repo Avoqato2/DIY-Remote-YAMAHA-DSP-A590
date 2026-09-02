@@ -47,12 +47,12 @@ A custom, self-developed remote control system for the YAMAHA DSP-A590 amplifier
 ### Transmitter Module (Remote)
 
 ![Transmitter Schematic](circuits/circuit_transimtter_Module.jpg)
-_Fig 1: Schematic for the remote control module including hardware debouncing._
+_Pig 1: Schematic for the remote control module including hardware debouncing._
 
 ### Receiver Module (Base Station)
 
 ![Base Module Schematic](circuits/circuit_Base_Module.jpg)
-\_Fig 2: Schematic for the base station connected to the YAMAHA DSP-A590.`)
+_Pig 2: Schematic for the base station connected to the YAMAHA DSP-A590.`)
 
 ## Getting Started
 
