@@ -19,7 +19,7 @@ Ticker encoderTicker; // Unser Timer für den Encoder
 // --------------------------------------------------------------------------------
 // TFT display Pins
 #define display_CS  D1  // Chip select line for TFT display
-#define display_DC  D2  // Data/command line for TFT display
+#define display_DC  D7  // Data/command line for TFT display
 #define display_BKL D3  // Backlight
 #define display_SAD D8  // Serial data line for TFT display
 #define display_SCL D10  // Serial clock line for TFT display
@@ -31,7 +31,7 @@ Ticker encoderTicker; // Unser Timer für den Encoder
 // --------------------------------------------------------------------------------
 // Button Pins
 #define BTN_POWER   D6  // Standby ON/OFF
-#define BTN_UP      D7  // Menu Up
+#define BTN_UP      D2  // Menu Up
 #define BTN_DOWN    D9 // Menu Down
 // --------------------------------------------------------------------------------
 // ------------------------------Define Pins---------------------------------------
