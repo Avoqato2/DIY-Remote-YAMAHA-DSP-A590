@@ -41,8 +41,8 @@ A custom, self-developed remote control system for the YAMAHA DSP-A590 amplifier
 
 - [ ] 1x ESP32 (Base Station Controller)
 - [ ] 1x USB-C port
-- [ ]1x Infrared LED
-- [ ]1x suitable resister for LED ## Schematics & Wiring
+- [ ] 1x Infrared LED
+- [ ] 1x suitable resister for LED ## Schematics & Wiring
 
 ### Transmitter Module (Remote)
 
