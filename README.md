@@ -46,12 +46,12 @@ A custom, self-developed remote control system for the YAMAHA DSP-A590 amplifier
 
 ### Transmitter Module (Remote)
 
-![Transmitter Schematic](circuits\circuit_transimtter_Module.jpg)
+![Transmitter Schematic](circuits/circuit_transimtter_Module.jpg)
 _Fig 1: Schematic for the remote control module including hardware debouncing._
 
 ### Receiver Module (Base Station)
 
-![Base Module Schematic](circuits\circuit_Base_Module.jpg)
+![Base Module Schematic](circuits/circuit_Base_Module.jpg)
 \_Fig 2: Schematic for the base station connected to the YAMAHA DSP-A590.`)
 
 ## Getting Started
@@ -69,7 +69,7 @@ The custom enclosure was designed in Blender. It features a 5mm wall thickness a
 
 You can view and download the STL files directly from this repository:
 
-- [📦 Download Base Case](3d-modles\remotecontroll-basismodul-case.stl)
-- [📦 Download Base Lid](3d-modles\remotecontroll-basismodul-case-lid.stl)
-- [📦 Download Remote Case](3d-modles\RemoteControll-case.stl)
-- [📦 Download Remote Lid](3d-modles\RemoteControll-case-lid.stl)
+- [📦 Download Base Case](3d-modles/remotecontroll-basismodul-case.stl)
+- [📦 Download Base Lid](3d-modles/remotecontroll-basismodul-case-lid.stl)
+- [📦 Download Remote Case](3d-modles/RemoteControll-case.stl)
+- [📦 Download Remote Lid](3d-modles/RemoteControll-case-lid.stl)
