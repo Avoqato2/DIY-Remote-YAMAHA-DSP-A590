@@ -52,7 +52,7 @@ _Pig 1: Schematic for the remote control module including hardware debouncing._
 ### Receiver Module (Base Station)
 
 ![Base Module Schematic](circuits/circuit_Base_Module.jpg)
-_Pig 2: Schematic for the base station connected to the YAMAHA DSP-A590.`)
+_Pig 2: Schematic for the base station connected to the YAMAHA DSP-A590._
 
 ## Getting Started
 
