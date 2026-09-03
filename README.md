@@ -60,7 +60,7 @@ _Pig 2: Schematic for the base station connected to the YAMAHA DSP-A590._
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/yourusername/DIY-Remote-YAMAHA-DSP-A590.git](https://github.com/yourusername/DIY-Remote-YAMAHA-DSP-A590.git)
+   git clone [https://github.com/avoqato2/DIY-Remote-YAMAHA-DSP-A590.git](https://github.com/avoqato2/DIY-Remote-YAMAHA-DSP-A590.git)
    ```
 
 ## Hardware Requirements
