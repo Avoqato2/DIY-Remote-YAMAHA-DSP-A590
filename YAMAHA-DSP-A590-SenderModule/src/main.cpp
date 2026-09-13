@@ -67,10 +67,10 @@ void do_deepsleep() {
   WiFi.mode(WIFI_OFF); 
   tft.fillScreen(ST77XX_BLACK); 
   
-  // 1. Licht aus
+  // Lights out
   digitalWrite(display_BKL, LOW);   
   
-  // 2. Den Zustand (LOW) im Deep Sleep einfrieren!
+  // keep the state LOW on pin
   gpio_hold_en((gpio_num_t)display_BKL);
   gpio_deep_sleep_hold_en();
   
@@ -343,7 +343,6 @@ void draw_menu(String (menu[]), int NUM_ITEMS){
         tft.print("  " + String(menu[item_index]) + "      ");
       }
     }else {
-      // Wenn das Menü zu Ende ist, überschreiben wir alte Einträge mit Leerzeichen
       tft.setTextColor(ST77XX_ORANGE, ST77XX_BLACK); 
       tft.print("                        "); 
     }
