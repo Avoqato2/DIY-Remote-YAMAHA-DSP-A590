@@ -101,7 +101,6 @@ void wlan_setup(){
       
       if (ir_codes.count(msg) > 0) {
         IrSender.sendNEC(122, ir_codes[msg], 0);
-        Serial.println("Reseaved CMD:"+ msg);
       }
     }
   }

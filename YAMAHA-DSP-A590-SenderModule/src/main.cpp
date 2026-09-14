@@ -198,8 +198,7 @@ void send_command(String cmd) {
   if (paket_succsess) {
     Serial.println("Nach Sync gesendet auf Kanal " + String(saved_channel) + ": " + cmd);
   } else {
-    Serial.println("Fehler: Basisstation ist offline!");
-    draw_feedback("Error: Offline");
+    draw_feedback("Error: Base Offline");
   }
 }
 
