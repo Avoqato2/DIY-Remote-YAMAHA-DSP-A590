@@ -89,9 +89,13 @@ void wlan_setup(){
   //  uint8_t *data                 ->  data as in what comes for a mesage
   //  size_t len                    ->  How long is the message
  void on_event(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-    if (type == WS_EVT_CONNECT) {           //do stuff on connedtion
+    if (type == WS_EVT_CONNECT) {
+      if (ws.count() > 3) {
+        client->close();
+        return;
+      }
       Serial.println("client is connected");
-    } 
+    }
     else if (type == WS_EVT_DISCONNECT) {   // do stuff on disconnection
       Serial.println("client disconnected");
     } 
@@ -107,8 +111,10 @@ void wlan_setup(){
 
   void webserver_and_websocket_setup(){
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send_P(200, "text/html", HTML);
-    });
+    AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", HTML);
+    response->addHeader("Connection", "close");
+    request->send(response);
+    });;
 
     ws.onEvent(on_event);    // giving the on Evnet as callback
     server.addHandler(&ws); // & symbol means that the server gets the adress for the Websocket and not the whole object
