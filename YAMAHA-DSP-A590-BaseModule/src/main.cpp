@@ -18,4 +18,6 @@ void loop() {
     
     // 2. Hält mDNS am Leben und räumt tote Web-Clients auf
     WebInterface::update();
+
+    Network::update();
 }

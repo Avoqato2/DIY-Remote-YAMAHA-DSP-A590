@@ -3,4 +3,5 @@
 
 namespace Network {
     void init();
+    void update(); 
 }

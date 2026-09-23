@@ -27,6 +27,7 @@ namespace Network {
         WiFi.setAutoReconnect(true); 
         WiFi.persistent(false); 
         WiFi.setSleepMode(WIFI_NONE_SLEEP); // Wichtig für Webserver-Stabilität!
+        WiFi.setPhyMode(WIFI_PHY_MODE_11G);
         WiFi.begin(SECRET_SSID, SECRET_PASS); 
 
         // Warteschleife OHNE delay() - nutzt stattdessen yield()
@@ -52,4 +53,20 @@ namespace Network {
         esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
         esp_now_register_recv_cb(on_data_recv);
     }
+
+    void update() {
+    static unsigned long last_check = 0;
+    
+    // Alle 5 Sekunden prüfen, ob das WLAN noch da ist
+    if (millis() - last_check > 5000) {
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("ALARM: WLAN-Verbindung verloren! Versuche Reconnect...");
+            WiFi.reconnect();
+        } else {
+            // Optional: Zeigt alle 5 Sekunden, dass er noch lebt
+            Serial.println("WLAN OK. IP: " + WiFi.localIP().toString());
+        }
+        last_check = millis();
+    }
+}
 }
