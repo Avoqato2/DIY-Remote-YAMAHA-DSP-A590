@@ -1,7 +1,7 @@
 # DIY-Remote YAMAHA DSP-A590
 
-[!IMPORTANT]
-The current version of this project is not functioning correctly. The funky experiment to Refactor it with AI wasn't the best move. Updates will come!
+>[!IMPORTANT]
+>The current version of this project is not functioning correctly. The funky experiment to Refactor it with AI wasn't the best move. Updates will come!
 
 This README.md file and some of the code were written with the help of AI. Be graceful to me, this is my first C++ and Arduino project.
 
