@@ -227,8 +227,8 @@ const char HTML[] PROGMEM = R"rawliteral(
       </div>
       
       <div id="volume_control_sec">
-        <button id="volume_up">Volume +</button>
         <button id="volume_down">Volume -</button>
+        <button id="volume_up">Volume +</button>
       </div>
       
       <h2>Channels</h2>
@@ -251,12 +251,12 @@ const char HTML[] PROGMEM = R"rawliteral(
         <div id="delay_center_rear_swf_control_sec">
           <button id="test">Test</button>
           <div id="delay_center_rear_swf_level">
-            <button id="delay_up">Delay +</button>
             <button id="delay_down">Delay -</button>
-            <button id="center_up">Center +</button>
+            <button id="delay_up">Delay +</button>
             <button id="center_down">Center -</button>
-            <button id="rear_up">Rear +</button>
+            <button id="center_up">Center +</button>
             <button id="rear_down">Rear -</button>
+            <button id="rear_up">Rear +</button>
           </div>
         </div>
         
@@ -277,40 +277,45 @@ const char HTML[] PROGMEM = R"rawliteral(
       <script>
         var gateway = `ws://${window.location.hostname}/ws`;
         var websocket; 
-        var holdInterval; 
+        var holdInterval = null; 
         
         window.addEventListener("load", function () {
           websocket = new WebSocket(gateway);
           
-          const startEvents = ["mousedown", "touchstart"];
-          const stopEvents = ["mouseup", "mouseleave", "touchend", "touchcancel"];
-          
-          startEvents.forEach(function (eventType) {
-            document.addEventListener(eventType, function (event) {
-              if (event.target.tagName === "BUTTON") {
-                if (eventType === "touchstart") event.preventDefault();
-                
-                const button_id = event.target.id;
-                sendAction(button_id);
-                
-                holdInterval = setInterval(function () { 
-                  sendAction(button_id); 
-                }, 150);
-              }
-            }, { passive: false });
-          });
-          
-          stopEvents.forEach(function (eventType) {
-            document.addEventListener(eventType, function (event) {
-              if (event.target.tagName === "BUTTON") {
-                clearInterval(holdInterval);
-              }
-            });
-          });
+          document.addEventListener("mousedown", handleStart);
+          document.addEventListener("touchstart", handleStart, { passive: false });
+        
+          window.addEventListener("mouseup", handleStop);
+          window.addEventListener("touchend", handleStop);
+          window.addEventListener("touchcancel", handleStop);
         });
         
+        function handleStart(event) {
+          if (event.target.tagName === "BUTTON") {
+            if (event.type === "touchstart") event.preventDefault();
+            
+            clearInterval(holdInterval); 
+            
+            const button = event.target;
+            const button_id = button.id;
+            
+            sendAction(button_id);
+            
+            // Dauerfeuer starten (wie auf der echten Fernbedienung)
+            holdInterval = setInterval(function () { 
+              sendAction(button_id); 
+            }, 150);
+            
+            button.addEventListener("mouseleave", handleStop, { once: true });
+          }
+        }
+        
+        function handleStop() {
+          clearInterval(holdInterval);
+        }
+        
         function sendAction(action) { 
-          if (websocket.readyState === WebSocket.OPEN) {
+          if (websocket && websocket.readyState === WebSocket.OPEN) {
             websocket.send(action); 
           }
         }

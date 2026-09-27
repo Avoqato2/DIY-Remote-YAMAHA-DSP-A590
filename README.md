@@ -1,7 +1,10 @@
 # DIY-Remote YAMAHA DSP-A590
 
->[!IMPORTANT]
->The current version of this project is not functioning correctly. The funky experiment to Refactor it with AI wasn't the best move. Updates will come!
+> [!IMPORTANT]
+> The current version of this project is not functioning correctly. The funky experiment to Refactor it with AI wasn't the best move. Updates will come!
+
+> [!NOTE]
+> I think the current version is functional. It's not the best, but it works. There are still some issues with mDNS in Firefox on the computer, but if you configure the base module with a fixed IP address in your network, you should be able to access the remote. I'm not sure if mDNS will ever work properly, but I'll take a look in to it.
 
 This README.md file and some of the code were written with the help of AI. Be graceful to me, this is my first C++ and Arduino project.
 

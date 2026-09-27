@@ -25,17 +25,12 @@ namespace WebInterface {
     )
     {
         if (type == WS_EVT_CONNECT) {
-            if (ws.count() > 3) {
-                client->close();
-                return;
-            }
-
-            Serial.println("WebSocket Client verbunden");
+            Serial.printf("WebSocket verbunden. Aktiv: %u\n", ws.count());
             return;
         }
 
         if (type == WS_EVT_DISCONNECT) {
-            Serial.println("WebSocket Client getrennt");
+            Serial.printf("WebSocket Client getrennt. Aktiv: %u\n", ws.count());
             return;
         }
 

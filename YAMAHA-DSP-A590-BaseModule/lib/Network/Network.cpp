@@ -40,6 +40,7 @@ namespace Network {
         Serial.println("Starte WLAN...");
 
         WiFi.mode(WIFI_STA);
+        WiFi.setSleepMode(WIFI_NONE_SLEEP);
         WiFi.setAutoReconnect(true);
         WiFi.persistent(false);
         WiFi.setPhyMode(WIFI_PHY_MODE_11G);
@@ -67,7 +68,7 @@ namespace Network {
         was_connected = true;
     }
 
-    void update()
+   void update()
     {
         static unsigned long last_check = 0;
 
@@ -76,15 +77,15 @@ namespace Network {
 
         last_check = millis();
 
-        bool connected = WiFi.status() == WL_CONNECTED;
+        bool connected = (WiFi.status() == WL_CONNECTED);
 
         if (!connected && was_connected) {
             Serial.println("WLAN verloren.");
-
+            
+            // mDNS sicher stoppen
             WebInterface::wifi_lost();
-
+            
             was_connected = false;
-            WiFi.reconnect();
         }
 
         if (connected && !was_connected) {
@@ -93,11 +94,9 @@ namespace Network {
 
             was_connected = true;
 
+            // mDNS wieder hochfahren
             WebInterface::wifi_connected();
         }
-
-        if (!connected)
-            WiFi.reconnect();
     }
 
 }
