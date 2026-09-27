@@ -1,72 +1,103 @@
 #include "Network.h"
 #include "../../include/secrets.h"
-#include "../IRControl/IRControl.h"
 
+#include "../IRControl/IRControl.h"
+#include "../WebInterface/WebInterface.h"
+
+#include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <espnow.h>
 
 namespace Network {
 
-    typedef struct struct_message {
-        char command[32]; 
-    } struct_message;
+    struct struct_message {
+        char command[32];
+    };
 
-    // ESP8266 ESP-NOW Callback
-    void on_data_recv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
-        struct_message payload;
-        memcpy(&payload, incomingData, sizeof(payload));
-        
-        // Befehl an den IR-Briefkasten übergeben
-        IRControl::queue_command(String(payload.command));
+    bool was_connected = false;
+
+    void on_data_recv(
+        uint8_t* mac,
+        uint8_t* incomingData,
+        uint8_t len
+    )
+    {
+        struct_message payload = {};
+
+        size_t size = min(
+            (size_t)len,
+            sizeof(payload.command) - 1
+        );
+
+        memcpy(payload.command, incomingData, size);
+        payload.command[size] = '\0';
+
+        IRControl::queue_command(payload.command);
     }
 
-    void init() {
-        Serial.println("-----start W-LAN connection-----");
-        
-        WiFi.mode(WIFI_STA); 
-        WiFi.setAutoReconnect(true); 
-        WiFi.persistent(false); 
-        WiFi.setSleepMode(WIFI_NONE_SLEEP); // Wichtig für Webserver-Stabilität!
+    void init()
+    {
+        Serial.println("Starte WLAN...");
+
+        WiFi.mode(WIFI_STA);
+        WiFi.setAutoReconnect(true);
+        WiFi.persistent(false);
         WiFi.setPhyMode(WIFI_PHY_MODE_11G);
-        WiFi.begin(SECRET_SSID, SECRET_PASS); 
 
-        // Warteschleife OHNE delay() - nutzt stattdessen yield()
-        unsigned long start_time = millis();
-        while (WiFi.status() != WL_CONNECTED && millis() - start_time < 20000) {
-            yield(); // Lässt den ESP atmen
-        }
+        WiFi.begin(SECRET_SSID, SECRET_PASS);
 
-        if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("WLAN fehlgeschlagen. Neustart!");
-            ESP.restart(); 
-        }
-
-        Serial.print("Verbunden! IP: ");
-        Serial.println(WiFi.localIP());
-
-        // ESP-NOW starten
-        if(esp_now_init() != 0){
-            Serial.println("ESP-NOW Fehler. Neustart!");
+        if (WiFi.waitForConnectResult() != WL_CONNECTED) {
+            Serial.println("WLAN fehlgeschlagen. Neustart.");
+            delay(500);
             ESP.restart();
         }
-        
+
+        Serial.print("WLAN verbunden: ");
+        Serial.println(WiFi.localIP());
+
+        if (esp_now_init() != 0) {
+            Serial.println("ESP-NOW Fehler. Neustart.");
+            delay(500);
+            ESP.restart();
+        }
+
         esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
         esp_now_register_recv_cb(on_data_recv);
+
+        was_connected = true;
     }
 
-    void update() {
-    static unsigned long last_check = 0;
-    
-    // Alle 5 Sekunden prüfen, ob das WLAN noch da ist
-    if (millis() - last_check > 5000) {
-        if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("ALARM: WLAN-Verbindung verloren! Versuche Reconnect...");
-            WiFi.reconnect();
-        } else {
-            // Optional: Zeigt alle 5 Sekunden, dass er noch lebt
-            Serial.println("WLAN OK. IP: " + WiFi.localIP().toString());
-        }
+    void update()
+    {
+        static unsigned long last_check = 0;
+
+        if (millis() - last_check < 1000)
+            return;
+
         last_check = millis();
+
+        bool connected = WiFi.status() == WL_CONNECTED;
+
+        if (!connected && was_connected) {
+            Serial.println("WLAN verloren.");
+
+            WebInterface::wifi_lost();
+
+            was_connected = false;
+            WiFi.reconnect();
+        }
+
+        if (connected && !was_connected) {
+            Serial.println("WLAN wieder verbunden.");
+            Serial.println(WiFi.localIP());
+
+            was_connected = true;
+
+            WebInterface::wifi_connected();
+        }
+
+        if (!connected)
+            WiFi.reconnect();
     }
-}
+
 }
