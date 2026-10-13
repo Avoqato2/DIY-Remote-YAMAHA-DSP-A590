@@ -11,7 +11,6 @@ This README.md file and some of the code were written with the help of AI. Be gr
 ![Platform](https://img.shields.io/badge/platform-ESP32-blue.svg)
 ![Framework](https://img.shields.io/badge/framework-Arduino-00979C.svg)
 ![Protocol](https://img.shields.io/badge/protocol-ESP--NOW-success.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 A custom, self-developed remote control system for the YAMAHA DSP-A590 amplifier. This project replaces or augments the original infrared remote by using ESP32 microcontrollers to establish a reliable, low-latency communication link via the ESP-NOW protocol.
 
